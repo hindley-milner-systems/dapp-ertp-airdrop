@@ -1,0 +1,15 @@
+<h1>Signing a Claim</h1>
+
+<p><em>More detail is logged to the console.</em></p>
+
+<script type="module">
+  import { demo } from './cosm-sign.js';
+
+  // How to detect Keplr
+  // https://docs.keplr.app/api/#how-to-detect-keplr
+  if (!window.keplr) {
+    alert('Please install keplr extension');
+  } else {
+    window.addEventListener('load', () => demo(window.keplr));
+  }
+</script>
