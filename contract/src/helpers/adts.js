@@ -45,4 +45,61 @@ const Either = (() => {
   return { Right, Left, of, tryCatch, fromNullable, fromUndefined };
 })();
 
-export { Either };
+const Observable = subscribe => ({
+  // Subscribes to the observable
+  subscribe,
+  map: f =>
+    Observable(observer =>
+      subscribe({
+        next: val => observer.next(f(val)),
+        error: err => observer.error(err),
+        complete: () => observer.complete(),
+      }),
+    ),
+  // Transforms the observable itself using a function that returns an observable
+  chain: f =>
+    Observable(observer =>
+      subscribe({
+        next: val => f(val).subscribe(observer),
+        error: err => observer.error(err),
+        complete: () => observer.complete(),
+      }),
+    ),
+  // Combines two observables process to behave as one
+  concat: other =>
+    Observable(observer => {
+      let completedFirst = false;
+      const completeFirst = () => {
+        completedFirst = true;
+        other.subscribe(observer);
+      };
+      subscribe({
+        next: val => observer.next(val),
+        error: err => observer.error(err),
+        complete: completeFirst,
+      });
+      if (completedFirst) {
+        other.subscribe(observer);
+      }
+    }),
+});
+
+// Static method to create an observable from a single value
+Observable.of = x =>
+  Observable(observer => {
+    observer.next(x);
+    observer.complete();
+  });
+
+// Static method to create an observational from asynchronous computation
+Observable.fromPromise = promise =>
+  Observable(observer => {
+    promise
+      .then(val => {
+        observer.next(val);
+        observer.complete();
+      })
+      .catch(err => observer.error(err));
+  });
+
+export { Either, Observable };

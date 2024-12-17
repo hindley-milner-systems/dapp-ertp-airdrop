@@ -13,7 +13,7 @@ import { makeStableFaucet } from '../mintStable.js';
 import buildManualTimer from '@agoric/zoe/tools/manualTimer.js';
 import { oneDay, TimeIntervals } from '../../src/helpers/time.js';
 import { extract } from '@agoric/vats/src/core/utils.js';
-import { mockBootstrapPowers } from '../../tools/boot-tools.js';
+import { makeMockTools, mockBootstrapPowers } from '../../tools/boot-tools.js';
 import { getBundleId } from '../../tools/bundle-tools.js';
 import { head } from '../../src/helpers/objectTools.js';
 
@@ -84,6 +84,8 @@ const makeTestContext = async t => {
   console.log('invitationIssuer::', invitationIssuer);
   const bundleCache = await makeNodeBundleCache('bundles/', {}, s => import(s));
   const bundle = await bundleCache.load(contractPath, 'assetContract');
+  const {} = makeMockTools(t, bundleCache);
+
   const testFeeIssuer = await E(zoe).getFeeIssuer();
   const testFeeBrand = await E(testFeeIssuer).getBrand();
 
@@ -96,7 +98,6 @@ const makeTestContext = async t => {
   return {
     invitationIssuer,
     zoe,
-    invitationIssuer,
     bundle,
     bundleCache,
     makeLocalTimer,
@@ -107,7 +108,38 @@ const makeTestContext = async t => {
   };
 };
 
-test.before(async t => (t.context = await makeTestContext(t)));
+test.before('before hook', async t => {
+  const { admin, vatAdminState } = makeFakeVatAdmin();
+  const { zoeService: zoe, feeMintAccess } = makeZoeKitForTest(admin);
+
+  const invitationIssuer = zoe.getInvitationIssuer();
+  console.log('------------------------');
+  console.log('invitationIssuer::', invitationIssuer);
+  const bundleCache = await makeNodeBundleCache('bundles/', {}, s => import(s));
+  const bundle = await bundleCache.load(contractPath, 'assetContract');
+  const {} = makeMockTools(t, bundleCache);
+
+  const testFeeIssuer = await E(zoe).getFeeIssuer();
+  const testFeeBrand = await E(testFeeIssuer).getBrand();
+
+  const testFeeTokenFaucet = await makeStableFaucet({
+    feeMintAccess,
+    zoe,
+    bundleCache,
+  });
+  console.log('bundle:::', { bundle, bundleCache });
+  t.context = {
+    invitationIssuer,
+    zoe,
+    bundle,
+    bundleCache,
+    makeLocalTimer,
+    testFeeTokenFaucet,
+    faucet: testFeeTokenFaucet.faucet,
+    testFeeBrand,
+    testFeeIssuer,
+  };
+});
 
 // IDEA: use test.serial and pass work products
 // between tests using t.context.

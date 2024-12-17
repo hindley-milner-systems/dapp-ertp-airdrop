@@ -5,13 +5,17 @@ import { E } from '@endo/far';
 import { AmountMath, AmountShape, AssetKind, MintShape } from '@agoric/ertp';
 import { TimeMath } from '@agoric/time';
 import { TimerShape } from '@agoric/zoe/src/typeGuards.js';
+import { bech32 } from 'bech32';
+import { sha256 } from '@noble/hashes/sha256';
+import { ripemd160 } from '@noble/hashes/ripemd160';
 import {
   atomicRearrange,
   makeRatio,
   withdrawFromSeat,
 } from '@agoric/zoe/src/contractSupport/index.js';
+import { decodeBase64 } from '@endo/base64';
 import { divideBy } from '@agoric/zoe/src/contractSupport/ratio.js';
-import { makeTracer } from '@agoric/internal';
+import { makeTracer, mustMatch } from '@agoric/internal';
 import { makeWaker, oneDay } from './helpers/time.js';
 import {
   handleFirstIncarnation,
@@ -22,6 +26,17 @@ import { createClaimSuccessMsg } from './helpers/messages.js';
 import { objectToMap } from './helpers/objectTools.js';
 import { getMerkleRootFromMerkleProof } from './merkle-tree/index.js';
 import '@agoric/zoe/exported.js';
+
+const ProofDataShape = harden({
+  hash: M.string(),
+  direction: M.string(),
+});
+
+const OfferArgsShape = harden({
+  tier: M.number(),
+  key: M.string(),
+  proof: M.arrayOf(ProofDataShape),
+});
 
 const TT = makeTracer('ContractStartFn');
 
@@ -70,14 +85,13 @@ harden(RESTARTING);
 /** @import {ContractMeta} from './@types/zoe-contract-facet.d'; */
 /** @import {Remotable} from '@endo/marshal' */
 
-export const privateArgsShape = harden({
-  marshaller: M.remotable('marshaller'),
-  storageNode: M.remotable('chainStorageNode'),
+export const privateArgsShape = {
+  namesByAddress: M.remotable('marshaller'),
   timer: TimerShape,
-});
+};
 harden(privateArgsShape);
 
-export const customTermsShape = harden({
+export const customTermsShape = {
   targetEpochLength: M.bigint(),
   initialPayoutValues: M.arrayOf(M.bigint()),
   tokenName: M.string(),
@@ -86,7 +100,7 @@ export const customTermsShape = harden({
   startTime: M.bigint(),
   feeAmount: AmountShape,
   merkleRoot: M.string(),
-});
+};
 harden(customTermsShape);
 
 export const divideAmountByTwo = brand => amount =>
@@ -162,7 +176,27 @@ export const start = async (zcf, privateArgs, baggage) => {
   /** @type {Zone} */
   const zone = makeDurableZone(baggage, 'rootZone');
 
-  const { timer } = privateArgs;
+  const { timer, namesByAddress } = privateArgs;
+
+  /**
+   * @param {string} addr
+   * @returns {ERef<DepositFacet>}
+   */
+  const getDepositFacet = addr => {
+    assert.typeof(addr, 'string');
+    console.log('geting deposit facet for::', addr);
+    const df = E(namesByAddress).lookup(addr, 'depositFacet');
+    console.log('------------------------');
+    console.log('df::', df);
+    return df;
+  };
+
+  /**
+   * @param {string} addr
+   * @param {Payment} pmt
+   */
+  const sendTo = (addr, pmt) => E(getDepositFacet(addr)).receive(pmt);
+
   /** @type {ContractTerms} */
   const {
     startTime = 120n,
@@ -345,18 +379,25 @@ export const start = async (zcf, privateArgs, baggage) => {
            * }} offerArgs
            */
           const claimHandler = (claimSeat, offerArgs) => {
+            mustMatch(
+              offerArgs,
+              OfferArgsShape,
+              'offerArgs does not contain the correct data.',
+            );
             const {
               give: { Fee: claimTokensFee },
             } = claimSeat.getProposal();
 
-            const { proof, key: pubkey, address, tier } = offerArgs;
+            const { proof, key: pubkey, tier } = offerArgs;
+
+            const derivedAddress = computeAddress(pubkey);
 
             // This line was added because of issues when testing
             // Is there a way to gracefully test assertion failures????
             if (accountStore.has(pubkey)) {
               claimSeat.exit();
               throw new Error(
-                `Allocation for address ${address} has already been claimed.`,
+                `Allocation for address ${derivedAddress} has already been claimed.`,
               );
             }
 
@@ -367,21 +408,54 @@ export const start = async (zcf, privateArgs, baggage) => {
             );
 
             const paymentAmount = this.state.payoutArray[tier];
+            console.log('------------------------');
+            console.log('paymentAmount::', paymentAmount);
+            const payment = await withdrawFromSeat(zcf, tokenHolderSeat, {
+              Tokens: paymentAmount,
+            });
+
+            console.log('------------------------');
+            console.log(
+              'withdrawn from tokenHolderSeat ### payment::',
+              payment,
+            );
+            console.log('------------------------');
+
+            const depositFacet = await getDepositFacet(derivedAddress);
+
+            console.log('------------------------');
+            console.log(
+              `depositFacet:: AFTER getDepositFacet(${derivedAddress})`,
+              depositFacet,
+            );
+            await Promise.all(
+              Object.values(payment).map(pmtP =>
+                E.when(pmtP, pmt => E(depositFacet).receive(pmt)),
+              ),
+            );
+            // XXX partial failure? return payments?
+            // await Promise.all(
+            //   E.when(
+            //     payment,
+            //     E(depositFacet).receive(payment),
+            //     new Error('Error getting payment'),
+            //   ),
+            // );
+            TT(
+              'After await E.when(payment, pmy => E(depositFacet).recieve(pmt)',
+            );
 
             rearrange(
-              harden([
-                [tokenHolderSeat, claimSeat, { Tokens: paymentAmount }],
-                [claimSeat, tokenHolderSeat, { Fee: claimTokensFee }],
-              ]),
+              harden([[claimSeat, tokenHolderSeat, { Fee: claimTokensFee }]]),
             );
 
             claimSeat.exit();
 
             accountStore.add(pubkey, {
-              address,
+              address: derivedAddress,
               pubkey,
               tier,
-              amountAllocated: paymentAmount,
+              amountAllocated: payment.value,
               epoch: this.state.currentEpoch,
             });
 

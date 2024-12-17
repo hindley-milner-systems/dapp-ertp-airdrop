@@ -4,6 +4,7 @@ import { Fail } from '@endo/errors';
 import { makeMarshal } from '@endo/marshal';
 import { makeTracer } from '@agoric/internal';
 import { installContract } from './platform-goals/start-contract.js';
+import { fixHub } from './fixHub.js';
 import './types.js';
 
 const contractName = 'tribblesAirdrop';
@@ -111,7 +112,7 @@ export const startAirdrop = async (powers, config) => {
   const {
     consume: {
       namesByAddressAdmin,
-      namesByAddress,
+      //  namesByAddress,
       //  bankManager,
       board,
       chainTimerService,
@@ -152,6 +153,7 @@ export const startAirdrop = async (powers, config) => {
     customTerms?.merkleRoot,
     'can not start contract without merkleRoot???',
   );
+  const namesByAddress = await fixHub(namesByAddressAdmin);
 
   const installation = await installContract(powers, {
     name: contractName,
@@ -168,6 +170,7 @@ export const startAirdrop = async (powers, config) => {
     issuerNames: ['Tribbles'],
     privateArgs: harden({
       timer,
+      namesByAddress,
     }),
   };
   trace('BEFORE astartContract(permittedPowers, startOpts);', { startOpts });

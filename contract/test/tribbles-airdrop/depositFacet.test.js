@@ -29,11 +29,16 @@ import {
 import { makeMockTools, mockBootstrapPowers } from '../../tools/boot-tools.js';
 import { merkleTreeAPI } from '../../src/merkle-tree/index.js';
 import { makeStableFaucet } from '../mintStable.js';
-import { makeOfferArgs, simulateClaim } from './actors.js';
-import { oneDay } from '../../src/helpers/time.js';
+import { makeOfferArgs } from './actors.js';
 import { merkleTreeObj } from './generated_keys.js';
 import { AmountMath } from '@agoric/ertp';
+import { Observable } from '../../src/helpers/adts.js';
+import { createStore } from '../../src/tribbles/utils.js';
+import { head } from '../../src/helpers/objectTools.js';
 
+const AIRDROP_TIERS_STATIC = [9000n, 6500n, 3500n, 1500n, 750n].map(
+  x => x * 1_000_000n,
+);
 const { accounts } = merkleTreeObj;
 // import { makeAgdTools } from '../agd-tools.js';
 
@@ -173,12 +178,8 @@ test.serial('deploy contract with core eval: airdrop / airdrop', async t => {
   });
 });
 
-// test.serial('checkBundle()', async t => {
-//   const { tribblesAirdrop } = t.context.shared.bundles;
-//   t.deepEqual(await checkBundle(tribblesAirdrop), '');
-// });
-const makeMakeOfferSpec = instance => (account, feeAmount) => ({
-  id: `${account.address}-offer-${Date.now()}`,
+const makeMakeOfferSpec = instance => (account, feeAmount, id) => ({
+  id: `offer-${id}`,
   invitationSpec: {
     source: 'contract',
     instance,
@@ -203,19 +204,17 @@ test.serial('E2E test', async t => {
     t,
     bundleCache,
   );
-  const { feeMintAccess, zoe, chainTimerService } = powers.consume;
+  const { feeMintAccess, zoe } = powers.consume;
 
   vatAdminState.installBundle(bundleID, tribblesAirdrop);
   const airdropPowers = extract(permit, powers);
   await startAirdrop(airdropPowers, {
-    merkleRoot: merkleTreeObj.root,
     options: {
       customTerms: {
         ...makeTerms(),
         merkleRoot: merkleTreeObj.root,
       },
       tribblesAirdrop: { bundleID },
-      merkleRoot: merkleTreeObj.root,
     },
   });
 
@@ -256,22 +255,7 @@ test.serial('E2E test', async t => {
   // see makeOfferArgs function for reference.
 
   const feePurse = await faucet(5n * 1_000_000n);
-  // const claimAttempt = simulateClaim(
-  //   t,
-  //   zoe,
-  //   instance,
-  //   feePurse,
-  //   merkleTreeObj.accounts[4],
-  // );
-  // await t.throwsAsync(
-  //   claimAttempt,
-  //   {
-  //     message: messagesObject.makeIllegalActionString(PREPARED),
-  //   },
-  //   'makeClaimInvitation() should throw an error stemming from the contract not being ready to accept offers.',
-  // );
 
-  await E(chainTimerService).advanceBy(oneDay * (oneDay / 2n));
   const makeFeeAmount = () => AmountMath.make(brands.Fee, 5n);
 
   /**
@@ -279,65 +263,153 @@ test.serial('E2E test', async t => {
    *
    * @example the first value is recieved as a  result of the following code
    *
-   * await E(aliceUpdates).next()
+   * await E(alicesOfferUpdates).next()
    * .then(res => {
    *    console.log('update res', res);
    *    return res;
    * });
    */
-  const aliceUpdates = E(wallets.alice.offers).executeOffer(
-    makeOfferSpec(accounts[4], makeFeeAmount()),
-  );
 
-  /*
-   *
-   * {
-   *    value: {
-   *    updated: 'offerStatus',
-   *    status: {
-   *      id: 'agoric19s266pak0llft2gcapn64x5aa37ysqnqzky46y-offer-1734092744506',
-   *      invitationSpec: [Object],
-   *      proposal: [Object],
-   *      offerArgs: [Object]
-   *     }
-   *   },
-   *    done: false
-   * }
-   */
+  const [aliceTier, bobTier] = [0, 2];
+  const [alicesOfferUpdates, alicePurse] = [
+    E(wallets.alice.offers).executeOffer(
+      makeOfferSpec({ ...accounts[4], tier: 0 }, makeFeeAmount(), 0),
+    ),
+    E(wallets.alice.peek).purseUpdates(brands.Tribbles),
+  ];
+
   /**
    * @typedef {{value: { updated: string, status: { id: string, invitationSpec: import('../../tools/wallet-tools.js').InvitationSpec, proposal:Proposal, offerArgs: {key: string, proof: []}}}}} OfferResult
    */
 
-  /** @returns {OfferResult} */
-  await E(aliceUpdates)
-    .next()
-    .then(res => {
-      console.log('update res', res);
-      return res;
+  const reducerFn = (state = [], action) => {
+    const { type, payload } = action;
+    switch (type) {
+      case 'NEW_RESULT':
+        return [...state, payload];
+      default:
+        return state;
+    }
+  };
+  const handleNewResult = result => ({
+    type: 'NEW_RESULT',
+    payload: result.value,
+  });
+
+  const makeAsyncObserverObject = (
+    generator,
+    completeMessage = 'Iterator lifecycle complete.',
+    maxCount = Infinity,
+  ) =>
+    Observable(async observer => {
+      const iterator = E(generator);
+      const { dispatch, getStore } = createStore(reducerFn, []);
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        // eslint-disable-next-line @jessie.js/safe-await-separator
+        const result = await iterator.next();
+        if (result.done) {
+          console.log('result.done === true #### breaking loop');
+          break;
+        }
+        dispatch(handleNewResult(result));
+        if (getStore().length === maxCount) {
+          console.log('getStore().length === maxCoutn');
+          break;
+        }
+        observer.next(result.value);
+      }
+      observer.complete({ message: completeMessage, values: getStore() });
     });
 
-  const tribblesWatcher = await E(wallets.alice.peek).purseUpdates(
-    brands.Tribbles,
-  );
+  const traceFn = label => value => {
+    console.log(label, '::::', value);
+    return value;
+  };
 
-  let payout;
-  for await (const value of tribblesWatcher) {
-    console.log('update from smartWallet', value); // Process the value here
-    payout = value;
-  }
-  t.deepEqual(
-    AmountMath.isGTE(payout, AmountMath.make(brands.Tribbles, 0n)),
-    true,
-  );
-  // await simulateClaim(
-  //   t,
-  //   zoe,
-  //   instance,
-  //   await faucet(5n * 1_000_000n),
-  //   accounts[4],
-  //   true,
-  //   `Allocation for address ${accounts[4].address} has already been claimed.`,
-  // );
+  await makeAsyncObserverObject(alicesOfferUpdates).subscribe({
+    next: traceFn('SUBSCRIBE.NEXT'),
+    error: traceFn('AliceOffer Error'),
+    complete: ({ message, values }) => {
+      t.deepEqual(message, 'Iterator lifecycle complete.');
+      t.deepEqual(values.length, 4);
+    },
+  });
+
+  await makeAsyncObserverObject(
+    alicePurse,
+    'AsyncGenerator alicePurse has fufilled its requirements.',
+    1,
+  ).subscribe({
+    next: traceFn('TRIBBLES_WATCHER ### SUBSCRIBE.NEXT'),
+    error: traceFn('TRIBBLES_WATCHER #### SUBSCRIBE.ERROR'),
+    complete: ({ message, values }) => {
+      t.deepEqual(
+        message,
+        'AsyncGenerator alicePurse has fufilled its requirements.',
+      );
+      t.deepEqual(
+        head(values),
+        AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[aliceTier]),
+      );
+    },
+  });
+  const [alicesSecondClaim] = [
+    E(wallets.alice.offers).executeOffer(
+      makeOfferSpec({ ...accounts[4], tier: 0 }, makeFeeAmount(), 0),
+    ),
+  ];
+
+  const alicesSecondOfferSubscriber = makeAsyncObserverObject(
+    alicesSecondClaim,
+  ).subscribe({
+    next: traceFn('alicesSecondClaim ### SUBSCRIBE.NEXT'),
+    error: traceFn('alicesSecondClaim #### SUBSCRIBE.ERROR'),
+    complete: traceFn('alicesSecondClaim ### SUBSCRIBE.COMPLETE'),
+  });
+  await t.throwsAsync(alicesSecondOfferSubscriber, {
+    message: `Allocation for address ${accounts[4].address} has already been claimed.`,
+  });
+  const [bobsOfferUpdate, bobsPurse] = [
+    E(wallets.bob.offers).executeOffer(
+      makeOfferSpec({ ...accounts[2], tier: bobTier }, makeFeeAmount(), 0),
+    ),
+    E(wallets.bob.peek).purseUpdates(brands.Tribbles),
+  ];
+
+  await makeAsyncObserverObject(
+    bobsOfferUpdate,
+    'AsyncGenerator bobsOfferUpdate has fufilled its requirements.',
+  ).subscribe({
+    next: traceFn('BOBS_OFFER_UPDATE:::: SUBSCRIBE.NEXT'),
+    error: traceFn('BOBS_OFFER_UPDATE:::: SUBSCRIBE.ERROR'),
+    complete: ({ message, values }) => {
+      t.deepEqual(
+        message,
+        'AsyncGenerator bobsOfferUpdate has fufilled its requirements.',
+      );
+      t.deepEqual(values.length, 4);
+    },
+  });
+
+  await makeAsyncObserverObject(
+    bobsPurse,
+    'AsyncGenerator bobsPurse has fufilled its requirements.',
+    1,
+  ).subscribe({
+    next: traceFn('TRIBBLES_WATCHER ### SUBSCRIBE.NEXT'),
+    error: traceFn('TRIBBLES_WATCHER #### SUBSCRIBE.ERROR'),
+    complete: ({ message, values }) => {
+      t.deepEqual(
+        message,
+        'AsyncGenerator bobsPurse has fufilled its requirements.',
+      );
+      t.deepEqual(
+        head(values),
+        AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[bobTier]),
+      );
+    },
+  });
 });
 
 // test.serial('agoricNames.instances has contract: airdrop', async t => {

@@ -215,7 +215,25 @@ export const makeMockTools = async (t, bundleCache) => {
     { namesByAddressAdmin, zoe },
     smartWalletIssuers,
   );
-
+  const makeMockWalletFactory = (additionalIssuers = {}) => {
+    const newIssuers = {};
+    for (const [name, kit] of entries(additionalIssuers)) {
+      console.group(
+        `::: START:::  ADDING NEW ISSUER ${name.toUpperCase()} TO SMART WALLET ISSUERS::: START::: `,
+      );
+      powers.issuer.produce[name].resolve(kit.issuer);
+      powers.brand.produce[name].resolve(kit.brand);
+      console.log(
+        `::: END:::  ADDING NEW ISSUER ${name.toUpperCase()} TO SMART WALLET ISSUERS::: END::: `,
+      );
+      Object.assign(newIssuers, { [name]: kit.issuer });
+      console.groupEnd();
+    }
+    return mockWalletFactory(
+      { namesByAddressAdmin, zoe },
+      { ...smartWalletIssuers, ...additionalIssuers },
+    );
+  };
   let pid = 0;
   const runCoreEval = async ({
     behavior,
@@ -252,6 +270,9 @@ export const makeMockTools = async (t, bundleCache) => {
 
   return {
     makeQueryTool,
+    powers,
+    vatAdminState,
+    makeMockWalletFactory,
     installBundles: (bundleRoots, log) =>
       installBundles(bundleCache, bundleRoots, installBundle, log),
     runCoreEval,

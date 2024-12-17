@@ -13,11 +13,12 @@ export const makeOfferArgs = ({
     key: '',
   },
   address = 'agoric12d3fault',
+  tier = createTestTier(),
 }) => ({
   key: pubkey.key,
   proof: merkleTreeObj.constructProof(pubkey),
   address,
-  tier: createTestTier(),
+  tier,
 });
 
 /**
