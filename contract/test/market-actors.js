@@ -10,7 +10,7 @@ import {
 import { seatLike } from '../tools/wallet-tools.js';
 
 const { entries, fromEntries, keys } = Object;
-
+/** @import { Brand, Issuer } from '@agoric/ertp/src/types.js'; */
 /**
  * @typedef {{
  *   brand: Record<string, Promise<Brand>> & { timer: unknown }
@@ -29,7 +29,7 @@ const { entries, fromEntries, keys } = Object;
 /**
  * @param {import('ava').ExecutionContext} t
  * @param {{
- *   wallet: import('./wallet-tools.js').MockWallet;
+ *   wallet: import('../tools/wallet-tools.js').MockWallet;
  *   queryTool: Pick<import('../tools/ui-kit-goals/queryKit.js').QueryTool, 'queryData'>;
  * }} mine
  * @param {{

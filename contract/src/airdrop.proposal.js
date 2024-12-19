@@ -4,6 +4,7 @@ import { makeMarshal } from '@endo/marshal';
 import { Fail } from '@endo/errors';
 import { makeTracer, deeplyFulfilledObject } from '@agoric/internal';
 import { makeStorageNodeChild } from '@agoric/internal/src/lib-chainStorage.js';
+import { fixHub } from './fixHub.js';
 
 const AIRDROP_TIERS_STATIC = [9000n, 6500n, 3500n, 1500n, 750n].map(
   x => x * 1_000_000n,
@@ -121,7 +122,6 @@ export const startAirdrop = async (powers, config = defaultConfig) => {
   const {
     consume: {
       namesByAddressAdmin,
-      namesByAddress,
       bankManager,
       board,
       chainTimerService,
@@ -169,7 +169,7 @@ export const startAirdrop = async (powers, config = defaultConfig) => {
     'can not start contract without merkleRoot???',
   );
   trace('AFTER assert(config?.options?.merkleRoot');
-  const marshaller = await E(board).getReadonlyMarshaller();
+  const namesByAddress = await fixHub(namesByAddressAdmin);
 
   const startOpts = {
     installation: await airdropInstallationP,
@@ -182,8 +182,7 @@ export const startAirdrop = async (powers, config = defaultConfig) => {
     privateArgs: await deeplyFulfilledObject(
       harden({
         timer,
-        storageNode,
-        marshaller,
+        namesByAddress,
       }),
     ),
   };
@@ -297,14 +296,15 @@ export const permit = Object.values(airdropManifest)[0];
 export const defaultProposalBuilder = async ({ publishRef, install }) => {
   return harden({
     // Somewhat unorthodox, source the exports from this builder module
-    sourceSpec: '@agoric/builders/scripts/testing/start-tribbles-airdrop.js',
+    sourceSpec:
+      '/workspaces/dapp-ertp-airdrop/contract/src/airdrop.proposal.js',
     getManifestCall: [
       'getManifestForAirdrop',
       {
         installKeys: {
           tribblesAirdrop: publishRef(
             install(
-              '@agoric/orchestration/src/examples/airdrop/airdrop.contract.js',
+              '/workspaces/dapp-ertp-airdrop/contract/src/airdrop.contract.js',
             ),
           ),
         },

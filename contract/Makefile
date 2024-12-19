@@ -1,5 +1,5 @@
 CHAINID=agoriclocal
-USER1ADDR=$(kagd keys show user1 -a --keyring-backend="test")
+USER1ADDR=$(agd keys show tg -a --keyring-backend="test")
 ACCT_ADDR=$(USER1ADDR)
 BLD=000000ubld
 
@@ -13,8 +13,8 @@ list:
 		awk -v RS= -F: '$$1 ~ /^[^#%]+$$/ { print $$1 }'
 
 balance-q:
-	kagd keys show user1 -a --keyring-backend="test"
-	kagd query bank balances $(ACCT_ADDR)
+	agd keys show tg -a --keyring-backend="test"
+	agd query bank balances $(ACCT_ADDR)
 
 GAS_ADJUSTMENT=1.2
 SIGN_BROADCAST_OPTS=--keyring-backend=test --chain-id=$(CHAINID) \
@@ -25,40 +25,40 @@ mint100:
 	make FUNDS=1000$(ATOM) fund-acct
 	cd /usr/src/agoric-sdk && \
 		yarn --silent agops vaults open --wantMinted 100 --giveCollateral 100 >/tmp/want-ist.json && \
-		yarn --silent agops perf satisfaction --executeOffer /tmp/want-ist.json --from user1 --keyring-backend=test
+		yarn --silent agops perf satisfaction --executeOffer /tmp/want-ist.json --from tg --keyring-backend=test
 
 # Keep mint4k around a while for compatibility
 mint4k:
 	make FUNDS=1000$(ATOM) fund-acct
 	cd /usr/src/agoric-sdk && \
 		yarn --silent agops vaults open --wantMinted 4000 --giveCollateral 1000 >/tmp/want4k.json && \
-		yarn --silent agops perf satisfaction --executeOffer /tmp/want4k.json --from user1 --keyring-backend=test
+		yarn --silent agops perf satisfaction --executeOffer /tmp/want4k.json --from tg --keyring-backend=test
 
 FUNDS=321$(BLD)
 fund-acct:
-	kagd tx bank send validator $(ACCT_ADDR) $(FUNDS) \
+	agd tx bank send validator $(ACCT_ADDR) $(FUNDS) \
 	  $(SIGN_BROADCAST_OPTS) \
 	  -o json >,tx.json
 	jq '{code: .code, height: .height}' ,tx.json
 
 gov-q:
-	kagd query gov proposals --output json | \
+	agd query gov proposals --output json | \
 		jq -c '.proposals[] | [.proposal_id,.voting_end_time,.status]'
 
 gov-voting-q:
-	kagd query gov proposals --status=voting_period --output json | \
+	agd query gov proposals --status=voting_period --output json | \
 		jq -c '.proposals[].proposal_id'
 
 PROPOSAL=1
 VOTE_OPTION=yes
 vote:
-	kagd tx gov vote $(PROPOSAL) $(VOTE_OPTION) --from=validator \
+	agd tx gov vote $(PROPOSAL) $(VOTE_OPTION) --from=validator \
 	  $(SIGN_BROADCAST_OPTS) \
 	  -o json >,tx.json
 	jq '{code: .code, height: .height}' ,tx.json
 
 instance-q:
-	kagd query vstorage data published.agoricNames.instance -o json
+	agd query vstorage data published.agoricNames.instance -o json
 
 start-contract: check-contract-airdrop
 
@@ -73,7 +73,6 @@ start: make start-contract-airdrop start-contract
 start-contract-airdrop:
 	yarn node scripts/deploy-contract.js \
 		--install src/airdrop.contract.js \
-		--eval src/platform-goals/board-aux.core.js \
 		--eval src/airdrop.proposal.js
 
 start-contract-swap:

@@ -2,6 +2,8 @@ import { E } from '@endo/far';
 import { AmountMath } from '@agoric/ertp';
 import { accounts } from '../data/agd-keys.js';
 import { merkleTreeObj } from './generated_keys.js';
+import { Observable } from '../../src/helpers/adts.js';
+import { createStore } from '../../src/tribbles/utils.js';
 
 const generateInt = x => () => Math.floor(Math.random() * (x + 1));
 
@@ -13,11 +15,12 @@ export const makeOfferArgs = ({
     key: '',
   },
   address = 'agoric12d3fault',
+  tier = createTestTier(),
 }) => ({
   key: pubkey.key,
   proof: merkleTreeObj.constructProof(pubkey),
   address,
-  tier: createTestTier(),
+  tier,
 });
 
 /**
@@ -91,4 +94,49 @@ const simulateClaim = async (
   }
 };
 
-export { simulateClaim };
+const reducerFn = (state = [], action) => {
+  const { type, payload } = action;
+  switch (type) {
+    case 'NEW_RESULT':
+      return [...state, payload];
+    default:
+      return state;
+  }
+};
+const handleNewResult = result => ({
+  type: 'NEW_RESULT',
+  payload: result.value,
+});
+
+const makeAsyncObserverObject = (
+  generator,
+  completeMessage = 'Iterator lifecycle complete.',
+  maxCount = Infinity,
+) =>
+  Observable(async observer => {
+    const iterator = E(generator);
+    const { dispatch, getStore } = createStore(reducerFn, []);
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      // eslint-disable-next-line @jessie.js/safe-await-separator
+      const result = await iterator.next();
+      if (result.done) {
+        console.log('result.done === true #### breaking loop');
+        break;
+      }
+      dispatch(handleNewResult(result));
+      if (getStore().length === maxCount) {
+        console.log('getStore().length === maxCoutn');
+        break;
+      }
+      observer.next(result.value);
+    }
+    observer.complete({ message: completeMessage, values: getStore() });
+  });
+
+const traceFn = label => value => {
+  console.log(label, '::::', value);
+  return value;
+};
+
+export { makeAsyncObserverObject, simulateClaim };

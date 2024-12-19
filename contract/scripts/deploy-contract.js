@@ -15,7 +15,7 @@ const options = {
   help: { type: 'boolean' },
   install: { type: 'string' },
   eval: { type: 'string', multiple: true },
-  service: { type: 'string', default: 'kagd' },
+  service: { type: 'string', default: 'agd' },
   workdir: { type: 'string', default: '/workspace/contract' },
 };
 /**

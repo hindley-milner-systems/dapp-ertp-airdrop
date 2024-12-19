@@ -6,7 +6,7 @@ const { Fail } = assert;
 /**
  * ref https://github.com/Agoric/agoric-sdk/issues/8408#issuecomment-1741445458
  *
- * @param {ERef<import('@agoric/vats').NameAdmin>} namesByAddressAdmin
+ * @param {import('@agoric/vats').NameAdmin} namesByAddressAdmin
  */
 export const fixHub = async namesByAddressAdmin => {
   assert(namesByAddressAdmin, 'no namesByAddressAdmin???');
