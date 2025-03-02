@@ -318,7 +318,7 @@ export const start = async (zcf, privateArgs, baggage) => {
         M.promise(M.remotable('depositFacet')),
       ).returns(M.promise()),
       getBankAssetMint: M.call().returns(MintShape),
-      reconfigureWakers: M.call(M.string(), TimestampShape).returns(M.any()),
+      reconfigureWakers: M.call(M.string(), M.promise()).returns(M.any()),
     }),
   };
 
@@ -552,7 +552,8 @@ export const start = async (zcf, privateArgs, baggage) => {
         getBankAssetMint() {
           return tokenMint;
         },
-        reconfigureWakers(nextState, currentTimestamp) {
+        async reconfigureWakers(nextState, currentTimestampP) {
+          const currentTimestamp = await currentTimestampP;
           console.log('------------------------');
           console.log(
             'RECONFIGURE WAKERS:: currentState',
@@ -576,30 +577,33 @@ export const start = async (zcf, privateArgs, baggage) => {
                 }),
                 cancelToken,
               );
-
-              stateMachine.transitionTo(PREPARED);
               break;
             case PAUSED:
               this.facets.helper.cancelTimer();
-              const difference = TimeMath.compareAbs(
-                currentTimestamp,
-                this.state.epochStartTime,
-              );
 
-              console.log('difference:::', difference);
-              if (difference === 1) {
-                this.state.remainingTime = this.state.epochLength;
+              if (
+                TimeMath.compareAbs(
+                  currentTimestamp,
+                  this.state.epochStartTime,
+                ) === 1
+              ) {
+                this.state.remainingTime = harden({
+                  relValue: this.state.epochLength,
+                  timerBrand,
+                });
               } else {
-                const absEndTime = fromTS(this.state.epochEndTime);
+                this.state.remainingTime = toRT(
+                  TimeMath.subtractAbsAbs(
+                    this.state.epochEndTime,
+                    currentTimestamp,
+                  ),
+                );
                 const absCurrentTime = fromTS(currentTimestamp);
-                const absStartTime = fromTS(this.state.epochStartTime);
+
                 console.log('------------------------');
                 console.log('absCurrentTime::'.toUpperCase(), absCurrentTime);
                 console.log('------------------------');
-                console.log('absEndTime::'.toUpperCase(), absEndTime);
-                const elapsedTime = absCurrentTime - absStartTime;
-                this.state.remainingTime =
-                  elapsedTime - fromTS(this.state.epochLength);
+
                 console.log('------------------------');
                 console.log(
                   'this.state.remainingTime::'.toUpperCase(),
@@ -607,45 +611,25 @@ export const start = async (zcf, privateArgs, baggage) => {
                 );
               }
 
-              console.group(
-                '------------- NESTED LOGGER OPEN:: RECONFIGURE_WAKERS SWITCH -------------',
-              );
-              console.log(
-                '=====================================================',
-              );
-              console.log('difference::', difference);
-              console.log('----------------------------------------------');
-              console.log('{stateDotStartTime:this.state.epochStartTime}::', {
-                stateDotStartTime: this.state.epochStartTime,
-              });
-              console.log(
-                '=====================================================',
-              );
-              console.log('{stateDotEndTime:this.state.epochStartTime}::', {
-                stateDotEndTime: this.state.epochEndTime,
-              });
-
-              console.log(
-                '---------- NESTED LOGGER CLOSED:: RECONFIGURE_WAKERS SWITCH----------',
-              );
-              console.groupEnd();
-
               this.state.lastRecordedTimestamp = currentTimestamp;
               void this.facets.helper.cancelTimer();
 
               break;
             case OPEN:
-              this.state.epochEndTime = TimeMath.addAbsRel(
-                currentTimestamp,
-                toRT(this.state.remainingTime),
-              );
-              console.group('######### SWITCH CASE ---- OPEN ------------');
+              console.group('-------- SWITCH CASE ---- OPEN ------------');
+              console.log('------------------------');
+              console.log('currentTimestamp::'.toUpperCase(), currentTimestamp);
               console.log('------------------------');
               console.log(
-                'this.state.epochEndTime::'.toUpperCase,
-                this.state.epochEndTime,
+                'this.state.remainingTime::'.toUpperCase(),
+                this.state.remainingTime,
               );
-              console.log('TRANSITIONING TO OPEN STATE::::');
+              console.groupEnd();
+              this.state.epochEndTime = TimeMath.addAbsRel(
+                currentTimestamp,
+                this.state.remainingTime,
+              );
+
               void this.facets.helper.updateEpochDetails(
                 currentTimestamp,
                 this.state.currentEpoch,
@@ -664,35 +648,19 @@ export const start = async (zcf, privateArgs, baggage) => {
             const pauseInvitation = await zcf.makeInvitation(
               // Is this UserSeat argument necessary????
               /** @type {UserSeat} */
-              async (seat, offerArgs) => {
+              (seat, offerArgs) => {
                 assert(
                   stateMachine.canTransitionTo(offerArgs.nextState),
                   `Illegal state transition. Can not transition from state: ${stateMachine.getStatus()} to state ${offerArgs.nextState}`,
                 );
-                const { genesisTimestamp, lastRecordedTimestamp } = this.state;
+
                 seat.exit('Exiting pause invitation');
-                TT('genesisTimestamp', {
-                  genesisTimestamp,
-                  lastRecordedTimestamp,
-                });
-                const tNow = await E(timer).getCurrentTimestamp();
-                const { epochEndTime, epochStartTime, epochLength } =
-                  this.state;
-                console.log('------------------------');
-                console.log('{ epochStartTime, epochEndTime, epochlength }::', {
-                  epochStartTime,
-                  epochEndTime,
-                  epochLength,
-                });
-                console.log('------------------------');
-                console.log('elapsedTime::');
-                TT('elapsed', { tNow });
 
                 zcf.setOfferFilter(offerArgs.filter);
                 void depositInvitation(adminDepositFacet);
-                return this.facets.creator.reconfigureWakers(
+                void this.facets.creator.reconfigureWakers(
                   offerArgs.nextState,
-                  tNow,
+                  E(timer).getCurrentTimestamp(),
                 );
               },
               'set offer filter',

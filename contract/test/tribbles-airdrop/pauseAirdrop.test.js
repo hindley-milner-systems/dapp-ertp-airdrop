@@ -9,6 +9,7 @@
 // XXX what's the state-of-the-art in ava setup?
 // eslint-disable-next-line import/order
 import { test as anyTest } from '../prepare-test-env-ava.js';
+import { TimeMath } from '@agoric/time';
 
 import { createRequire } from 'module';
 import { env as ambientEnv } from 'node:process';
@@ -40,8 +41,18 @@ import { AmountMath } from '@agoric/ertp';
 import { Observable, Task } from '../../src/helpers/adts.js';
 import { createStore } from '../../src/tribbles/utils.js';
 import { head } from '../../src/helpers/objectTools.js';
-import { messagesObject, OPEN, PAUSED } from '../../src/airdrop.contract.js';
+import {
+  messagesObject,
+  OPEN,
+  PAUSED,
+  PREPARED,
+} from '../../src/airdrop.contract.js';
 
+const makeToTS = timerBrand => value =>
+  TimeMath.coerceTimestampRecord(value, timerBrand);
+const fromTS = ts => TimeMath.absValue(ts);
+const makeToRT = timerBrand => value =>
+  TimeMath.coerceRelativeTimeRecord(value, timerBrand);
 const reducerFn = (state = [], action) => {
   const { type, payload } = action;
   switch (type) {
@@ -197,10 +208,6 @@ const makeMakeOfferSpec =
   });
 
 /**
- *  @import {Invitation} from '@agoric/zoe/exported.js'
- */
-
-/**
  * @test {Invitation<makePauseContractInvitation>} - Description of what this specific test case is verifying.
  * @summary Briefly summarizes the test's purpose.
  * @param {import('ava').TestFn} t - AVA's test context object.  Provides assertion methods and other utilities.
@@ -244,12 +251,14 @@ test.serial(
 
     const { chainTimerService } = airdropPowers.consume;
 
+    const timerBrand = await E(chainTimerService).getTimerBrand();
+
     await startAirdrop(airdropPowers, {
       options: {
         customTerms: {
-          ...makeTerms(),
-          startTime: 8200n,
-          targetEpochLength: 1200n,
+          ...makeTerms(), // default terms meaning contract will last 5 epochs.
+          startTime: 4600n, // Contract will be in "PREPARED" stae for 6 hours (21_600n seconds).
+          targetEpochLength: 3600n * 4n, // Contract will have 4 hour epochs.
           merkleRoot: merkleTreeObj.root,
         },
         tribblesAirdrop: { bundleID },
@@ -261,10 +270,9 @@ test.serial(
     // INVESTIGATION
     // Looking into the mount of time it takes for 1 `tick` to ake place.
     //
-    const beforeTick = await E(chainTimerService).getCurrentTimestamp();
     await E(chainTimerService).tickN(50n);
-    const afterTick = await E(chainTimerService).getCurrentTimestamp();
-    console.log({ beforeTick, afterTick });
+    const t2 = await E(chainTimerService).getCurrentTimestamp();
+
     await makeAsyncObserverObject(
       adminZoePurse,
       'invitation recieved',
@@ -287,40 +295,9 @@ test.serial(
     const airdropSpace = powers;
     const instance = await airdropSpace.instance.consume.tribblesAirdrop;
 
-    const terms = await E(zoe).getTerms(instance);
-
-    const { issuers, brands } = terms;
-
-    const walletFactory = makeMockWalletFactory({
-      Tribbles: issuers.Tribbles,
-      Fee: issuers.Fee,
-    });
-
-    const wallets = {
-      alice: await walletFactory.makeSmartWallet(accounts[4].address),
-      bob: await walletFactory.makeSmartWallet(accounts[2].address),
-      carol: await walletFactory.makeSmartWallet(accounts[10].address),
-      dave: await walletFactory.makeSmartWallet(accounts[5].address),
-    };
-    const { faucet, mintBrandedPayment } = makeStableFaucet({
-      bundleCache,
-      feeMintAccess,
-      zoe,
-    });
-
-    await Object.values(wallets).map(async wallet => {
-      const pmt = await mintBrandedPayment(10n);
-      console.log('payment::', pmt);
-      await E(wallet.deposit).receive(pmt);
-    });
-    const makeOfferSpec = makeMakeOfferSpec(instance);
-
-    await faucet(5n * 1_000_000n);
-
-    const makeFeeAmount = () => AmountMath.make(brands.Fee, 5n);
-
+    // Invoked when the contract is in the "PREPARED" state.
     const pauseOffer = {
-      id: 'admin-pause-0',
+      id: 'pause-prepared-contract-0',
       invitationSpec: {
         source: 'purse',
         instance,
@@ -340,6 +317,8 @@ test.serial(
       complete: traceFn('pauseOfferUpdater ## complete'),
     });
 
+    // Confirms that the admin recieves a new invitation upon using `makePauseContractInvitation`
+    await E(chainTimerService).advanceTo(TimeMath.absValue(t2) + 4600n);
     await makeAsyncObserverObject(
       adminZoePurse,
       'invitation recieved',
@@ -358,83 +337,93 @@ test.serial(
       },
     });
 
-    // const removePauseOffer = {
-    //   id: 'admin-pause-5',
-    //   invitationSpec: {
-    //     source: 'purse',
-    //     instance,
-    //     description: 'set offer filter',
-    //   },
-    //   proposal: {},
-    //   offerArgs: {
-    //     nextState: OPEN,
-    //     filter: [],
-    //   },
-    // };
-    // const removePauseOfferUpdater = E(adminWallet.offers).executeOffer(
-    //   removePauseOffer,
-    // );
+    // Simulates time passing to demonstrate that the initial TimerWaker does not get invoked due to it being cancelled.
+    await E(chainTimerService).tickN(575n);
 
-    // await makeAsyncObserverObject(removePauseOfferUpdater).subscribe({
-    //   next: traceFn('removePauseOfferUpdater ## next'),
-    //   error: traceFn('removePauseOfferUpdater## Error'),
-    //   complete: traceFn('removePauseOfferUpdater ## complete'),
-    // });
-    // const secondPauseOfferUpdater = E(adminWallet.offers).executeOffer(
-    //   pauseOffer,
-    // );
-    // await makeAsyncObserverObject(secondPauseOfferUpdater).subscribe({
-    //   next: traceFn('secondPauseOfferUpdater ## next'),
-    //   error: traceFn('secondPauseOfferUpdater## Error'),
-    //   complete: traceFn('secondPauseOfferUpdater ## complete'),
-    // });
+    const t3 = await E(chainTimerService).getCurrentTimestamp();
+    const startTimeRecord = harden({ relValue: 4600n, timerBrand });
 
-    const [aliceTier, bobTier, carolTier, daveTier] = [0, 2, 2, 4];
-    const claimTimestamp = await E(chainTimerService).getCurrentTimestamp();
+    const initialStartTime = TimeMath.addAbsRel(t0, startTimeRecord);
 
-    const [alice, bob, carol, dave] = [
-      [
-        E(wallets.alice.offers).executeOffer(
-          makeOfferSpec({ ...accounts[4], tier: 0 }, makeFeeAmount(), 0),
-        ),
-        E(wallets.alice.peek).purseUpdates(brands.Tribbles),
-      ],
-      [
-        E(wallets.bob.offers).executeOffer(
-          makeOfferSpec({ ...accounts[2], tier: bobTier }, makeFeeAmount(), 1),
-        ),
-        E(wallets.bob.peek).purseUpdates(brands.Tribbles),
-      ],
-      [
-        E(wallets.carol.offers).executeOffer(
-          makeOfferSpec(
-            { ...accounts[10], tier: carolTier },
-            makeFeeAmount(),
-            2,
-          ),
-        ),
-        E(wallets.carol.peek).purseUpdates(brands.Tribbles),
-      ],
-      [
-        E(wallets.dave.offers).executeOffer(
-          makeOfferSpec(
-            { ...accounts[20], tier: daveTier },
-            makeFeeAmount(),
-            3,
-          ),
-        ),
-        E(wallets.dave.peek).purseUpdates(brands.Tribbles),
-      ],
+    t.deepEqual(
+      TimeMath.compareAbs(t3, initialStartTime),
+      1,
+      'Absolute timestamp contract initially expected to open claiming windo',
+    );
+    const removePauseOffer = {
+      id: 'pause-removal-0',
+      invitationSpec: {
+        source: 'purse',
+        instance,
+        description: 'set offer filter',
+      },
+      proposal: {},
+      offerArgs: {
+        nextState: PREPARED,
+        filter: [],
+      },
+    };
+    const removePauseOfferUpdater = E(adminWallet.offers).executeOffer(
+      removePauseOffer,
+    );
+
+    await makeAsyncObserverObject(removePauseOfferUpdater).subscribe({
+      next: traceFn('removePauseOfferUpdater ## next'),
+      error: traceFn('removePauseOfferUpdater## Error'),
+      complete: traceFn('removePauseOfferUpdater ## complete'),
+    });
+
+    const t4 = await E(chainTimerService).getCurrentTimestamp();
+
+    // ensure that the contract MUST have transitioned from "PREPARED" to "OPEN" state.
+    await E(chainTimerService).advanceTo(TimeMath.absValue(t4) + 4600n);
+
+    const terms = await E(zoe).getTerms(instance);
+
+    const { issuers, brands } = terms;
+
+    const walletFactory = makeMockWalletFactory({
+      Tribbles: issuers.Tribbles,
+      Fee: issuers.Fee,
+    });
+    const wallets = {
+      alice: await walletFactory.makeSmartWallet(accounts[4].address),
+    };
+    const { faucet, mintBrandedPayment } = makeStableFaucet({
+      bundleCache,
+      feeMintAccess,
+      zoe,
+    });
+
+    await Object.values(wallets).map(async wallet => {
+      const pmt = await mintBrandedPayment(10n);
+      console.log('payment::', pmt);
+      await E(wallet.deposit).receive(pmt);
+    });
+    const makeOfferSpec = makeMakeOfferSpec(instance);
+
+    await faucet(5n * 1_000_000n);
+
+    const makeFeeAmount = () => AmountMath.make(brands.Fee, 5n);
+
+    const aliceTier = 0;
+
+    t.log(
+      'demonstrating a claim after contract has transitioned: PREPARED -> PAUSED -> PREPARED -> OPEN',
+    );
+
+    await E(chainTimerService).tickN(300n);
+    const alice = [
+      E(wallets.alice.offers).executeOffer(
+        makeOfferSpec({ ...accounts[4], tier: 0 }, makeFeeAmount(), 0),
+      ),
+      E(wallets.alice.peek).purseUpdates(brands.Tribbles),
     ];
 
     const [alicesOfferUpdates, alicesPurse] = alice;
-    const [bobsOfferUpdate, bobsPurse] = bob;
-    const [carolsOfferUpdate, carolsPurse] = carol;
-    const [davesOfferUpdater, davesPurse] = dave;
-    /**
-     * @typedef {{value: { updated: string, status: { id: string, invitationSpec: import('../../tools/wallet-tools.js').InvitationSpec, proposal:Proposal, offerArgs: {key: string, proof: []}}}}} OfferResult
-     */
 
+    /**
+     */
     await makeAsyncObserverObject(alicesOfferUpdates).subscribe({
       next: traceFn('AliceOffer::1 ### SUBSCRIBE.NEXT'),
       error: traceFn('AliceOffer::1 ### SUBSCRIBE.ERROR'),
@@ -458,94 +447,11 @@ test.serial(
         );
         t.deepEqual(
           head(values),
-          AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[aliceTier]),
-        );
-      },
-    });
-
-    t.deepEqual(claimTimestamp, t0);
-    const [alicesSecondClaim] = [
-      E(wallets.alice.offers).executeOffer(
-        makeOfferSpec({ ...accounts[4], tier: 0 }, makeFeeAmount(), 0),
-      ),
-    ];
-
-    const alicesSecondOfferSubscriber = makeAsyncObserverObject(
-      alicesSecondClaim,
-    ).subscribe({
-      next: traceFn('AliceOfffer::2 ### SUBSCRIBE.NEXT'),
-      error: traceFn('AliceOfffer::2 #### SUBSCRIBE.ERROR'),
-      complete: traceFn('AliceOfffer::2 ### SUBSCRIBE.COMPLETE'),
-    });
-
-    await t.throwsAsync(alicesSecondOfferSubscriber, {
-      message: 'Token allocation has already been claimed.',
-    });
-
-    await makeAsyncObserverObject(
-      bobsOfferUpdate,
-      'AsyncGenerator bobsOfferUpdate has fufilled its requirements.',
-    ).subscribe({
-      next: traceFn('BOBS_OFFER_UPDATE:::: SUBSCRIBE.NEXT'),
-      error: traceFn('BOBS_OFFER_UPDATE:::: SUBSCRIBE.ERROR'),
-      complete: ({ message, values }) => {
-        t.deepEqual(
-          message,
-          'AsyncGenerator bobsOfferUpdate has fufilled its requirements.',
-        );
-        t.deepEqual(values.length, 4);
-      },
-    });
-
-    await makeAsyncObserverObject(
-      bobsPurse,
-      'AsyncGenerator bobsPurse has fufilled its requirements.',
-      1,
-    ).subscribe({
-      next: traceFn('TRIBBLES_WATCHER ### SUBSCRIBE.NEXT'),
-      error: traceFn('TRIBBLES_WATCHER #### SUBSCRIBE.ERROR'),
-      complete: ({ message, values }) => {
-        t.deepEqual(
-          message,
-          'AsyncGenerator bobsPurse has fufilled its requirements.',
-        );
-        t.deepEqual(
-          head(values),
-          AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[bobTier]),
-        );
-      },
-    });
-
-    await makeAsyncObserverObject(
-      carolsOfferUpdate,
-      'AsyncGenerator carolsOfferUpdate has fufilled its requirements.',
-    ).subscribe({
-      next: traceFn('CAROLS_OFFER_UPDATE:::: SUBSCRIBE.NEXT'),
-      error: traceFn('CAROLS_OFFER_UPDATE:::: SUBSCRIBE.ERROR'),
-      complete: ({ message, values }) => {
-        t.deepEqual(
-          message,
-          'AsyncGenerator carolsOfferUpdate has fufilled its requirements.',
-        );
-        t.deepEqual(values.length, 4);
-      },
-    });
-
-    await makeAsyncObserverObject(
-      carolsPurse,
-      'AsyncGenerator carolPurse has fufilled its requirements.',
-      1,
-    ).subscribe({
-      next: traceFn('TRIBBLES_WATCHER ### SUBSCRIBE.NEXT'),
-      error: traceFn('TRIBBLES_WATCHER #### SUBSCRIBE.ERROR'),
-      complete: ({ message, values }) => {
-        t.deepEqual(
-          message,
-          'AsyncGenerator carolPurse has fufilled its requirements.',
-        );
-        t.deepEqual(
-          head(values),
-          AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[bobTier]),
+          AmountMath.make(
+            brands.Tribbles,
+            AIRDROP_TIERS_STATIC[aliceTier] / 2n,
+          ),
+          'alicesPurse should receive the correct number of tokens allocated to tier 0  claimants who claiming during the 2nd epoch',
         );
       },
     });
