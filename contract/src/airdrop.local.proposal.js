@@ -29,7 +29,7 @@ const AIRDROP_TIERS_STATIC = [9000n, 6500n, 3500n, 1500n, 750n].map(
 export const defaultCustomTerms = {
   startTime: 0n,
   initialPayoutValues: harden(AIRDROP_TIERS_STATIC),
-  targetNumberOfEpochs: 5,
+  targetNumberOfEpochs: 5n,
   targetEpochLength: 12_000n / 2n,
   targetTokenSupply: 10_000_000n * 1_000_000n,
   tokenName: 'Tribbles',
