@@ -594,8 +594,6 @@ test.serial(
 
     const [bobsOfferUpdates, bobsPurse] = bob;
 
-    /**
-     */
     await makeAsyncObserverObject(bobsOfferUpdates).subscribe({
       next: traceFn('BobOffer::1 ### SUBSCRIBE.NEXT'),
       error: traceFn('BobOffer::1 ### SUBSCRIBE.ERROR'),
@@ -624,6 +622,10 @@ test.serial(
         );
       },
     });
+
+    t.log(
+      'Successfully verified user ability to claim tokens from airdrop while claiming window is open.',
+    );
 
     // Invoked when the contract is in the "PREPARED" state.
     const pauseOffer = {
@@ -675,42 +677,23 @@ test.serial(
 
     const initialStartTime = TimeMath.addAbsRel(t0, startTimeRecord);
 
-    const [bobsOfferUpdatesTwo] = [
-      E(wallets.bob.offers).executeOffer(
-        makeOfferSpec({ ...accounts[5], tier: 0 }, makeFeeAmount(), 0),
-      ),
-    ];
+    const disallowedClaimAttempt = await E(wallets.bob.offers).executeOffer(
+      makeOfferSpec({ ...accounts[5], tier: 0 }, makeFeeAmount(), 0),
+    );
 
-    /**
-     */
-    await makeAsyncObserverObject(bobsOfferUpdatesTwo).subscribe({
-      next: traceFn('BobOffer::2 ### SUBSCRIBE.NEXT'),
-      error: traceFn('BobOffer::2 ### SUBSCRIBE.ERROR'),
-      complete: ({ message, values }) => {
-        t.deepEqual(message, 'Iterator lifecycle complete.');
-        t.deepEqual(values.length, 4);
+    t.throwsAsync(
+      makeAsyncObserverObject(disallowedClaimAttempt).subscribe({
+        next: traceFn('disallowedClaimAttempt ## next'),
+        error: traceFn('disallowedClaimAttempt## error'),
+        complete: traceFn('disallowedClaimAttempt ## complete'),
+      }),
+      {
+        message: 'Airdrop can not be claimed when contract status is: paused.',
       },
-    });
+    );
 
-    await makeAsyncObserverObject(
-      bobsPurse,
-      'AsyncGenerator bobsPurse has fufilled its requirements.',
-      1,
-    ).subscribe({
-      next: traceFn('bobsPurse ### SUBSCRIBE.NEXT'),
-      error: traceFn('bobsPurse #### SUBSCRIBE.ERROR'),
-      complete: ({ message, values }) => {
-        t.deepEqual(
-          message,
-          'AsyncGenerator bobsPurse has fufilled its requirements.',
-        );
-        t.deepEqual(
-          head(values),
-          AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[0]),
-          'bobsPurse should receive the correct number of tokens allocated to tier 0  claimants who claiming during the 1st epoch',
-        );
-      },
-    });
+    t.log('Successfully verified the inability to claim airdrop while paused.');
+
     t.deepEqual(
       TimeMath.compareAbs(t3, initialStartTime),
       1,
