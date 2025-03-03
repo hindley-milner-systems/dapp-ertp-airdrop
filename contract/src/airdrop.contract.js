@@ -591,13 +591,16 @@ export const start = async (zcf, privateArgs, baggage) => {
                   relValue: this.state.epochLength,
                   timerBrand,
                 });
-              } else {
-                this.state.remainingTime = toRT(
-                  TimeMath.subtractAbsAbs(
-                    this.state.epochEndTime,
-                    currentTimestamp,
-                  ),
+                console.log(
+                  'this.state.remainingTime::'.toUpperCase(),
+                  this.state.remainingTime,
                 );
+              } else {
+                this.state.remainingTime = TimeMath.subtractAbsAbs(
+                  this.state.epochEndTime,
+                  currentTimestamp,
+                );
+
                 const absCurrentTime = fromTS(currentTimestamp);
 
                 console.log('------------------------');
@@ -624,16 +627,15 @@ export const start = async (zcf, privateArgs, baggage) => {
                 'this.state.remainingTime::'.toUpperCase(),
                 this.state.remainingTime,
               );
-              console.groupEnd();
               this.state.epochEndTime = TimeMath.addAbsRel(
                 currentTimestamp,
-                this.state.remainingTime,
+                this.state.remainingTime.relValue,
               );
 
               void this.facets.helper.updateEpochDetails(
-                currentTimestamp,
+                TimeMath.absValue(currentTimestamp),
                 this.state.currentEpoch,
-                this.state.epochEndTime,
+                this.state.remainingTime.relValue,
               );
               console.groupEnd();
 
