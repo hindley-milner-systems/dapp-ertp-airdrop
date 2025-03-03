@@ -208,13 +208,19 @@ const makeMakeOfferSpec =
   });
 
 /**
- * @test {Invitation<makePauseContractInvitation>} - Description of what this specific test case is verifying.
- * @summary Briefly summarizes the test's purpose.
- * @param {import('ava').TestFn} t - AVA's test context object.  Provides assertion methods and other utilities.
+ * @test Verifies that the airdrop contract correctly handles state transitions through multiple states
+ * @summary Tests the complete lifecycle of pausing and resuming an airdrop contract, specifically:
+ * 1. Admin can pause a contract in PREPARED state using makePauseContractInvitation
+ * 2. Pausing prevents automatic transition to OPEN state when startTime is reached
+ * 3. Admin can unpause the contract by transitioning back to PREPARED state
+ * 4. After unpausing, contract correctly transitions to OPEN state when startTime is reached
+ * 5. Users can successfully claim tokens after the full state transition sequence
+ * 6. Claimed token amounts are correctly calculated based on the user's tier and current epoch
+ * @param {import('ava').TestFn} t - AVA's test context object. Provides assertion methods and other utilities.
  * @async
  */
 test.serial(
-  'makePauseContractInvitation::: stateMachine.getStatus === "PREPARED"',
+  'contract state transitions: PREPARED -> PAUSED -> PREPARED -> OPEN should work correctly',
   async t => {
     const merkleRoot = merkleTreeObj.root;
     const { bundleCache } = t.context;
@@ -405,6 +411,338 @@ test.serial(
     await faucet(5n * 1_000_000n);
 
     const makeFeeAmount = () => AmountMath.make(brands.Fee, 5n);
+
+    const aliceTier = 0;
+
+    t.log(
+      'demonstrating a claim after contract has transitioned: PREPARED -> PAUSED -> PREPARED -> OPEN',
+    );
+
+    await E(chainTimerService).tickN(300n);
+    const alice = [
+      E(wallets.alice.offers).executeOffer(
+        makeOfferSpec({ ...accounts[4], tier: 0 }, makeFeeAmount(), 0),
+      ),
+      E(wallets.alice.peek).purseUpdates(brands.Tribbles),
+    ];
+
+    const [alicesOfferUpdates, alicesPurse] = alice;
+
+    /**
+     */
+    await makeAsyncObserverObject(alicesOfferUpdates).subscribe({
+      next: traceFn('AliceOffer::1 ### SUBSCRIBE.NEXT'),
+      error: traceFn('AliceOffer::1 ### SUBSCRIBE.ERROR'),
+      complete: ({ message, values }) => {
+        t.deepEqual(message, 'Iterator lifecycle complete.');
+        t.deepEqual(values.length, 4);
+      },
+    });
+
+    await makeAsyncObserverObject(
+      alicesPurse,
+      'AsyncGenerator alicePurse has fufilled its requirements.',
+      1,
+    ).subscribe({
+      next: traceFn('alicesPurse ### SUBSCRIBE.NEXT'),
+      error: traceFn('alicesPurse #### SUBSCRIBE.ERROR'),
+      complete: ({ message, values }) => {
+        t.deepEqual(
+          message,
+          'AsyncGenerator alicePurse has fufilled its requirements.',
+        );
+        t.deepEqual(
+          head(values),
+          AmountMath.make(
+            brands.Tribbles,
+            AIRDROP_TIERS_STATIC[aliceTier] / 2n,
+          ),
+          'alicesPurse should receive the correct number of tokens allocated to tier 0  claimants who claiming during the 2nd epoch',
+        );
+      },
+    });
+  },
+);
+
+/**
+ * @test Verifies that the airdrop contract correctly handles state transitions through multiple states
+ * @summary Tests the complete lifecycle of pausing and resuming an airdrop contract, specifically:
+ * 1. Admin can pause a contract in PREPARED state using makePauseContractInvitation
+ * 2. Pausing prevents automatic transition to OPEN state when startTime is reached
+ * 3. Admin can unpause the contract by transitioning back to PREPARED state
+ * 4. After unpausing, contract correctly transitions to OPEN state when startTime is reached
+ * 5. Users can successfully claim tokens after the full state transition sequence
+ * 6. Claimed token amounts are correctly calculated based on the user's tier and current epoch
+ * @param {import('ava').TestFn} t - AVA's test context object. Provides assertion methods and other utilities.
+ * @async
+ */
+test.serial(
+  'contract state transitions: CLAIM-WINDOW-OPEN -> PAUSED -> CLAIM-WINDOW-OPEN',
+  async t => {
+    const merkleRoot = merkleTreeObj.root;
+    const { bundleCache } = t.context;
+
+    t.log('starting contract with merkleRoot:', merkleRoot);
+    // Is there a better way to obtain a reference to this bundle???
+    // or is this just fine??
+    const { tribblesAirdrop } = t.context.shared.bundles;
+
+    const bundleID = getBundleId(tribblesAirdrop);
+    const {
+      powers,
+      vatAdminState,
+      makeMockWalletFactory,
+      provisionSmartWallet,
+    } = await makeMockTools(t, bundleCache);
+
+    const { feeMintAccess, zoe } = powers.consume;
+
+    vatAdminState.installBundle(bundleID, tribblesAirdrop);
+    const adminWallet = await provisionSmartWallet(
+      'agoric1jng25adrtpl53eh50q7fch34e0vn4g72j6zcml',
+      {
+        BLD: 10n,
+      },
+    );
+
+    const zoeIssuer = await E(zoe).getInvitationIssuer();
+
+    const zoeBrand = await zoeIssuer.getBrand();
+    const adminZoePurse = E(adminWallet.peek).purseUpdates(zoeBrand);
+
+    const airdropPowers = extract(permit, powers);
+
+    const { chainTimerService } = airdropPowers.consume;
+
+    const timerBrand = await E(chainTimerService).getTimerBrand();
+
+    await startAirdrop(airdropPowers, {
+      options: {
+        customTerms: {
+          ...makeTerms(), // default terms meaning contract will last 5 epochs.
+          startTime: 0n, // Contract will be in "PREPARED" stae for 6 hours (21_600n seconds).
+          targetEpochLength: 3600n * 4n * 3n, // Contract will have 4 hour epochs.
+          merkleRoot: merkleTreeObj.root,
+        },
+        tribblesAirdrop: { bundleID },
+      },
+    });
+
+    const t0 = await E(chainTimerService).getCurrentTimestamp();
+
+    // INVESTIGATION
+    // Looking into the mount of time it takes for 1 `tick` to ake place.
+    //
+    await E(chainTimerService).tickN(50n);
+    const t2 = await E(chainTimerService).getCurrentTimestamp();
+
+    await makeAsyncObserverObject(
+      adminZoePurse,
+      'invitation recieved',
+      1,
+    ).subscribe({
+      next: traceFn('ADMIN_WALLET::: NEXT'),
+      error: traceFn('ADMIN WALLET::: ERROR'),
+      complete: async ({ message, values }) => {
+        const [pauseInvitationDetails] = values;
+        t.deepEqual(message, 'invitation recieved');
+        t.deepEqual(pauseInvitationDetails.brand, zoeBrand);
+        t.deepEqual(
+          head(pauseInvitationDetails.value).description,
+          'set offer filter',
+        );
+      },
+    });
+    /** @type {import('../../src/airdrop.local.proposal.js').AirdropSpace} */
+    // @ts-expeimport { merkleTreeObj } from '@agoric/orchestration/src/examples/airdrop/generated_keys.js';
+    const airdropSpace = powers;
+    const instance = await airdropSpace.instance.consume.tribblesAirdrop;
+
+    const terms = await E(zoe).getTerms(instance);
+
+    const { issuers, brands } = terms;
+    const makeFeeAmount = () => AmountMath.make(brands.Fee, 5n);
+
+    const walletFactory = makeMockWalletFactory({
+      Tribbles: issuers.Tribbles,
+      Fee: issuers.Fee,
+    });
+    const wallets = {
+      alice: await walletFactory.makeSmartWallet(accounts[4].address),
+      bob: await walletFactory.makeSmartWallet(accounts[5].address),
+    };
+    const { faucet, mintBrandedPayment } = makeStableFaucet({
+      bundleCache,
+      feeMintAccess,
+      zoe,
+    });
+
+    await Object.values(wallets).map(async wallet => {
+      const pmt = await mintBrandedPayment(10n);
+      console.log('payment::', pmt);
+      await E(wallet.deposit).receive(pmt);
+    });
+    await faucet(5n * 1_000_000n);
+
+    const makeOfferSpec = makeMakeOfferSpec(instance);
+    const bob = [
+      E(wallets.bob.offers).executeOffer(
+        makeOfferSpec({ ...accounts[5], tier: 0 }, makeFeeAmount(), 0),
+      ),
+      E(wallets.bob.peek).purseUpdates(brands.Tribbles),
+    ];
+
+    const [bobsOfferUpdates, bobsPurse] = bob;
+
+    /**
+     */
+    await makeAsyncObserverObject(bobsOfferUpdates).subscribe({
+      next: traceFn('BobOffer::1 ### SUBSCRIBE.NEXT'),
+      error: traceFn('BobOffer::1 ### SUBSCRIBE.ERROR'),
+      complete: ({ message, values }) => {
+        t.deepEqual(message, 'Iterator lifecycle complete.');
+        t.deepEqual(values.length, 4);
+      },
+    });
+
+    await makeAsyncObserverObject(
+      bobsPurse,
+      'AsyncGenerator bobsPurse has fufilled its requirements.',
+      1,
+    ).subscribe({
+      next: traceFn('bobsPurse ### SUBSCRIBE.NEXT'),
+      error: traceFn('bobsPurse #### SUBSCRIBE.ERROR'),
+      complete: ({ message, values }) => {
+        t.deepEqual(
+          message,
+          'AsyncGenerator bobsPurse has fufilled its requirements.',
+        );
+        t.deepEqual(
+          head(values),
+          AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[0]),
+          'bobsPurse should receive the correct number of tokens allocated to tier 0  claimants who claiming during the 1st epoch',
+        );
+      },
+    });
+
+    // Invoked when the contract is in the "PREPARED" state.
+    const pauseOffer = {
+      id: 'pause-prepared-contract-0',
+      invitationSpec: {
+        source: 'purse',
+        instance,
+        description: 'set offer filter',
+      },
+      proposal: {},
+      offerArgs: {
+        nextState: PAUSED,
+        filter: [messagesObject.makeClaimInvitationDescription()],
+      },
+    };
+    const pauseOfferUpdater = E(adminWallet.offers).executeOffer(pauseOffer);
+
+    await makeAsyncObserverObject(pauseOfferUpdater).subscribe({
+      next: traceFn('pauseOfferUpdater ## next'),
+      error: traceFn('pauseOfferUpdater## Error'),
+      complete: traceFn('pauseOfferUpdater ## complete'),
+    });
+
+    // Confirms that the admin recieves a new invitation upon using `makePauseContractInvitation`
+    await E(chainTimerService).advanceTo(TimeMath.absValue(t2) + 4600n);
+    await makeAsyncObserverObject(
+      adminZoePurse,
+      'invitation recieved',
+      1,
+    ).subscribe({
+      next: traceFn('ADMIN_WALLET::: NEXT'),
+      error: traceFn('ADMIN WALLET::: ERROR'),
+      complete: async ({ message, values }) => {
+        const [pauseInvitationDetails] = values;
+        t.deepEqual(message, 'invitation recieved');
+        t.deepEqual(pauseInvitationDetails.brand, zoeBrand);
+        t.deepEqual(
+          head(pauseInvitationDetails.value).description,
+          'set offer filter',
+        );
+      },
+    });
+
+    // Simulates time passing to demonstrate that the initial TimerWaker does not get invoked due to it being cancelled.
+    await E(chainTimerService).tickN(575n);
+
+    const t3 = await E(chainTimerService).getCurrentTimestamp();
+    const startTimeRecord = harden({ relValue: 4600n, timerBrand });
+
+    const initialStartTime = TimeMath.addAbsRel(t0, startTimeRecord);
+
+    const [bobsOfferUpdatesTwo] = [
+      E(wallets.bob.offers).executeOffer(
+        makeOfferSpec({ ...accounts[5], tier: 0 }, makeFeeAmount(), 0),
+      ),
+    ];
+
+    /**
+     */
+    await makeAsyncObserverObject(bobsOfferUpdatesTwo).subscribe({
+      next: traceFn('BobOffer::2 ### SUBSCRIBE.NEXT'),
+      error: traceFn('BobOffer::2 ### SUBSCRIBE.ERROR'),
+      complete: ({ message, values }) => {
+        t.deepEqual(message, 'Iterator lifecycle complete.');
+        t.deepEqual(values.length, 4);
+      },
+    });
+
+    await makeAsyncObserverObject(
+      bobsPurse,
+      'AsyncGenerator bobsPurse has fufilled its requirements.',
+      1,
+    ).subscribe({
+      next: traceFn('bobsPurse ### SUBSCRIBE.NEXT'),
+      error: traceFn('bobsPurse #### SUBSCRIBE.ERROR'),
+      complete: ({ message, values }) => {
+        t.deepEqual(
+          message,
+          'AsyncGenerator bobsPurse has fufilled its requirements.',
+        );
+        t.deepEqual(
+          head(values),
+          AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[0]),
+          'bobsPurse should receive the correct number of tokens allocated to tier 0  claimants who claiming during the 1st epoch',
+        );
+      },
+    });
+    t.deepEqual(
+      TimeMath.compareAbs(t3, initialStartTime),
+      1,
+      'Absolute timestamp contract initially expected to open claiming windo',
+    );
+    const removePauseOffer = {
+      id: 'pause-removal-0',
+      invitationSpec: {
+        source: 'purse',
+        instance,
+        description: 'set offer filter',
+      },
+      proposal: {},
+      offerArgs: {
+        nextState: OPEN,
+        filter: [],
+      },
+    };
+    const removePauseOfferUpdater = E(adminWallet.offers).executeOffer(
+      removePauseOffer,
+    );
+
+    await makeAsyncObserverObject(removePauseOfferUpdater).subscribe({
+      next: traceFn('removePauseOfferUpdater ## next'),
+      error: traceFn('removePauseOfferUpdater## Error'),
+      complete: traceFn('removePauseOfferUpdater ## complete'),
+    });
+
+    const t4 = await E(chainTimerService).getCurrentTimestamp();
+
+    // ensure that the contract MUST have transitioned from "PREPARED" to "OPEN" state.
+    await E(chainTimerService).advanceTo(TimeMath.absValue(t4) + 4600n);
 
     const aliceTier = 0;
 
