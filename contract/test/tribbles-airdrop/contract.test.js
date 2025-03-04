@@ -438,7 +438,7 @@ test.serial('makeClaimTokensInvitation happy path::', async t => {
 });
 
 test.serial(
-  'makeClaimTokensInvitation:: after executing makePauseContractInvitation',
+  'makeClaimTokensInvitation:: after executing makeSetOfferFilterInvitation',
   async t => {
     const merkleRoot = merkleTreeAPI.generateMerkleRoot(
       accounts.map(x => x.pubkey.key),

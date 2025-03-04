@@ -19,7 +19,7 @@ const AIRDROP_TIERS_STATIC = [9000n, 6500n, 3500n, 1500n, 750n].map(
  * @typedef {{
  *   startTime: bigint;
  *   initialPayoutValues: any;
- *   targetNumberOfEpochs: number;
+ *   targetNumberOfEpochs: bigint;
  *   targetEpochLength: bigint;
  *   targetTokenSupply: bigint;
  *   tokenName: string;
@@ -216,7 +216,7 @@ export const startAirdrop = async (powers, config) => {
     'depositFacet',
   );
 
-  await E(creatorFacet).makePauseContractInvitation(adminDepositFacet);
+  await E(creatorFacet).makeSetOfferFilterInvitation(adminDepositFacet);
 
   // prepareForExecutionEnv(creatorFacet, tribblesBrand, tribblesIssuer, tribblesMint, chainStorage, board)
   // Add utribbles token to vbank
