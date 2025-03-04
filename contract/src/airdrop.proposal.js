@@ -5,8 +5,13 @@ import { Fail } from '@endo/errors';
 import { makeTracer, deeplyFulfilledObject } from '@agoric/internal';
 import { fixHub } from './fixHub.js';
 
+const DECIMAL_PLACES = 1_000_000n;
+
+const multiply = x => y => x * y;
+
+const toDenomValue = multiply(DECIMAL_PLACES);
 const AIRDROP_TIERS_STATIC = [9000n, 6500n, 3500n, 1500n, 750n].map(
-  x => x * 1_000_000n,
+  toDenomValue,
 );
 
 // vstorage paths under published.*
@@ -158,7 +163,7 @@ export const startAirdrop = async (powers, config = defaultConfig) => {
     ...customTerms,
     feeAmount: harden({
       brand: feeBrand,
-      value: 5n,
+      value: toDenomValue(5n),
     }),
   };
 
@@ -215,7 +220,7 @@ export const startAirdrop = async (powers, config = defaultConfig) => {
     'depositFacet',
   );
 
-  await E(creatorFacet).makePauseContractInvitation(adminDepositFacet);
+  await E(creatorFacet).makeSetOfferFilterInvitation(adminDepositFacet);
 
   // addAsset creating a short lived mint
   // See https://github.com/hindley-milner-systems/dapp-ertp-airdrop/issues/164
