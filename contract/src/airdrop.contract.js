@@ -314,7 +314,7 @@ export const start = async (zcf, privateArgs, baggage) => {
     }),
     creator: M.interface('creator', {
       getAirdropTimeDetails: M.call().returns(M.any()),
-      makePauseContractInvitation: M.call(
+      makeSetOfferFilterInvitation: M.call(
         M.promise(M.remotable('depositFacet')),
       ).returns(M.promise()),
       getBankAssetMint: M.call().returns(MintShape),
@@ -395,17 +395,11 @@ export const start = async (zcf, privateArgs, baggage) => {
          */
         async updateDistributionMultiplier(wakeTime) {
           const { facets } = this;
-
-          console.log('BEFORE makeNewCancelToken', cancelToken);
           makeNewCancelToken();
-          console.log('AFTER makeNewCancelToken', cancelToken);
-
           const currentTimestamp = await E(timer).getCurrentTimestamp();
-
           this.state.lastRecordedTimestamp = currentTimestamp;
           TT('new timestamp:', this.state.lastRecordedTimestamp);
 
-          TT('baggage.keys', [...baggage.keys()]);
           void E(timer).setWakeup(
             wakeTime,
             makeWaker(
@@ -418,8 +412,8 @@ export const start = async (zcf, privateArgs, baggage) => {
 
                 if (this.state.currentEpoch + 1n >= targetNumberOfEpochs) {
                   TT('Airdrop is ending!', this.state.currentEpoch);
-                  zcf.shutdown('Airdrop complete');
                   stateMachine.transitionTo(EXPIRED);
+                  zcf.shutdown('Airdrop complete');
                 } else {
                   TT('SND #### inside updateDistributionMultiplier WAKER', {
                     payoutArray: this.state.payoutArray,
@@ -554,16 +548,9 @@ export const start = async (zcf, privateArgs, baggage) => {
         },
         async reconfigureWakers(nextState, currentTimestampP) {
           const currentTimestamp = await currentTimestampP;
-          console.log('------------------------');
-          console.log(
-            'RECONFIGURE WAKERS:: currentState',
-            stateMachine.getStatus(),
-          );
+
           stateMachine.transitionTo(nextState);
-          console.log(
-            'RECONFIGURE WAKERS:: currentState ## AFTER TRANSITION',
-            stateMachine.getStatus(),
-          );
+
           switch (nextState) {
             case PREPARED:
               TT('START TIME', baggage.get('startTime'));
@@ -591,42 +578,17 @@ export const start = async (zcf, privateArgs, baggage) => {
                   relValue: this.state.epochLength,
                   timerBrand,
                 });
-                console.log(
-                  'this.state.remainingTime::'.toUpperCase(),
-                  this.state.remainingTime,
-                );
               } else {
                 this.state.remainingTime = TimeMath.subtractAbsAbs(
                   this.state.epochEndTime,
                   currentTimestamp,
                 );
-
-                const absCurrentTime = fromTS(currentTimestamp);
-
-                console.log('------------------------');
-                console.log('absCurrentTime::'.toUpperCase(), absCurrentTime);
-                console.log('------------------------');
-
-                console.log('------------------------');
-                console.log(
-                  'this.state.remainingTime::'.toUpperCase(),
-                  this.state.remainingTime,
-                );
               }
 
               this.state.lastRecordedTimestamp = currentTimestamp;
-              void this.facets.helper.cancelTimer();
 
               break;
             case OPEN:
-              console.group('-------- SWITCH CASE ---- OPEN ------------');
-              console.log('------------------------');
-              console.log('currentTimestamp::'.toUpperCase(), currentTimestamp);
-              console.log('------------------------');
-              console.log(
-                'this.state.remainingTime::'.toUpperCase(),
-                this.state.remainingTime,
-              );
               this.state.epochEndTime = TimeMath.addAbsRel(
                 currentTimestamp,
                 this.state.remainingTime.relValue,
@@ -637,7 +599,6 @@ export const start = async (zcf, privateArgs, baggage) => {
                 this.state.currentEpoch,
                 this.state.remainingTime.relValue,
               );
-              console.groupEnd();
 
               break;
             default:
@@ -645,7 +606,7 @@ export const start = async (zcf, privateArgs, baggage) => {
           }
         },
 
-        makePauseContractInvitation(adminDepositFacet) {
+        makeSetOfferFilterInvitation(adminDepositFacet) {
           const depositInvitation = async depositFacet => {
             const pauseInvitation = await zcf.makeInvitation(
               // Is this UserSeat argument necessary????

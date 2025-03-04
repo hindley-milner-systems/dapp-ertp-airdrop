@@ -215,7 +215,7 @@ export const startAirdrop = async (powers, config = defaultConfig) => {
     'depositFacet',
   );
 
-  await E(creatorFacet).makePauseContractInvitation(adminDepositFacet);
+  await E(creatorFacet).makeSetOfferFilterInvitation(adminDepositFacet);
 
   // addAsset creating a short lived mint
   // See https://github.com/hindley-milner-systems/dapp-ertp-airdrop/issues/164

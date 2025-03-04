@@ -210,7 +210,7 @@ const makeMakeOfferSpec =
 /**
  * @test Verifies that the airdrop contract correctly handles state transitions through multiple states
  * @summary Tests the complete lifecycle of pausing and resuming an airdrop contract, specifically:
- * 1. Admin can pause a contract in PREPARED state using makePauseContractInvitation
+ * 1. Admin can pause a contract in PREPARED state using makeSetOfferFilterInvitation
  * 2. Pausing prevents automatic transition to OPEN state when startTime is reached
  * 3. Admin can unpause the contract by transitioning back to PREPARED state
  * 4. After unpausing, contract correctly transitions to OPEN state when startTime is reached
@@ -323,7 +323,7 @@ test.serial(
       complete: traceFn('pauseOfferUpdater ## complete'),
     });
 
-    // Confirms that the admin recieves a new invitation upon using `makePauseContractInvitation`
+    // Confirms that the admin recieves a new invitation upon using `makeSetOfferFilterInvitation`
     await E(chainTimerService).advanceTo(TimeMath.absValue(t2) + 4600n);
     await makeAsyncObserverObject(
       adminZoePurse,
@@ -467,7 +467,7 @@ test.serial(
 /**
  * @test Verifies that the airdrop contract correctly handles state transitions through multiple states
  * @summary Tests the complete lifecycle of pausing and resuming an airdrop contract, specifically:
- * 1. Admin can pause a contract in PREPARED state using makePauseContractInvitation
+ * 1. Admin can pause a contract in PREPARED state using makeSetOfferFilterInvitation
  * 2. Pausing prevents automatic transition to OPEN state when startTime is reached
  * 3. Admin can unpause the contract by transitioning back to PREPARED state
  * 4. After unpausing, contract correctly transitions to OPEN state when startTime is reached
@@ -649,7 +649,7 @@ test.serial(
       complete: traceFn('pauseOfferUpdater ## complete'),
     });
 
-    // Confirms that the admin recieves a new invitation upon using `makePauseContractInvitation`
+    // Confirms that the admin recieves a new invitation upon using `makeSetOfferFilterInvitation`
     await E(chainTimerService).advanceTo(TimeMath.absValue(t2) + 4600n);
     await makeAsyncObserverObject(
       adminZoePurse,
