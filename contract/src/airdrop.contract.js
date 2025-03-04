@@ -214,11 +214,7 @@ export const start = async (zcf, privateArgs, baggage) => {
    */
   const getDepositFacet = addr => {
     assert.typeof(addr, 'string');
-    console.log('geting deposit facet for::', addr);
-    const df = E(namesByAddress).lookup(addr, 'depositFacet');
-    console.log('------------------------');
-    console.log('df::', df);
-    return df;
+    return E(namesByAddress).lookup(addr, 'depositFacet');
   };
 
   /** @type {import('./airdrop.proposal.js').CustomContractTerms} */
@@ -358,13 +354,6 @@ export const start = async (zcf, privateArgs, baggage) => {
             targetNumberOfEpochs: this.state.targetNumberOfEpochs,
           });
 
-          console.group('UPDATE EPOCH DETAILS ##############');
-          console.log('------ epochLength', epochLength);
-          console.log('#####################################');
-          //            '#####################################'
-          //        );
-          console.log('------ epochIdx', epochIdx);
-          console.groupEnd();
           void helper.updateDistributionMultiplier(
             TimeMath.addAbsRel(absTime, toRT(epochLength)),
           );
