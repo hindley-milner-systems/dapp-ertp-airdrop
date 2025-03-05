@@ -72,9 +72,7 @@ export const mockBootstrapPowers = async (
 
   const noop = () => {};
   const modernTime = BigInt(new Date(2024, 6, 1, 9).valueOf() / 1000);
-  const chainTimerService = buildManualTimer(noop, modernTime, {
-    timeStep: 60n,
-  });
+  const chainTimerService = buildManualTimer(noop, modernTime);
   const timerBrand = await E(chainTimerService).getTimerBrand();
 
   const chainStorage = makeMockChainStorageRoot();
