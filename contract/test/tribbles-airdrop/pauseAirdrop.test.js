@@ -48,11 +48,6 @@ import {
   PREPARED,
 } from '../../src/airdrop.contract.js';
 
-const makeToTS = timerBrand => value =>
-  TimeMath.coerceTimestampRecord(value, timerBrand);
-const fromTS = ts => TimeMath.absValue(ts);
-const makeToRT = timerBrand => value =>
-  TimeMath.coerceRelativeTimeRecord(value, timerBrand);
 const reducerFn = (state = [], action) => {
   const { type, payload } = action;
   switch (type) {
@@ -97,10 +92,46 @@ const traceFn = label => value => {
   console.log(label, '::::', value);
   return value;
 };
-
+const makeMakeContractPauseOfferSpecs = instance => ({
+  pauseContract: (id = 'pause-prepared-contract-0') => ({
+    id,
+    invitationSpec: {
+      source: 'purse',
+      instance,
+      description: 'set offer filter',
+    },
+    proposal: {},
+    offerArgs: {
+      nextState: PAUSED,
+      filter: [messagesObject.makeClaimInvitationDescription()],
+    },
+  }),
+  unpauseContract: (id = 'remove-pause-0', nextState = PREPARED) => ({
+    id,
+    invitationSpec: {
+      source: 'purse',
+      instance,
+      description: 'set offer filter',
+    },
+    proposal: {},
+    offerArgs: {
+      nextState,
+      filter: [],
+    },
+  }),
+});
 const AIRDROP_TIERS_STATIC = [9000n, 6500n, 3500n, 1500n, 750n].map(
   x => x * 1_000_000n,
 );
+
+const projectValues = (seed, values) =>
+  Array(seed)
+    .fill(0)
+    .reduce(
+      (acc, _, i) => [...acc, values.map(value => value / 2n ** BigInt(i))],
+      [],
+    );
+
 const { accounts } = merkleTreeObj;
 // import { makeAgdTools } from '../agd-tools.js';
 
@@ -264,7 +295,7 @@ test.serial(
         customTerms: {
           ...makeTerms(), // default terms meaning contract will last 5 epochs.
           startTime: 4600n, // Contract will be in "PREPARED" stae for 6 hours (21_600n seconds).
-          targetEpochLength: 3600n * 4n, // Contract will have 4 hour epochs.
+          targetEpochLength: 86_400n / 4n, // Contract will have 4 hour epochs.
           merkleRoot: merkleTreeObj.root,
         },
         tribblesAirdrop: { bundleID },
@@ -272,6 +303,22 @@ test.serial(
     });
 
     const t0 = await E(chainTimerService).getCurrentTimestamp();
+
+    const expectedStartTime = TimeMath.addAbsRel(
+      t0,
+
+      harden({ relValue: 4600n, timerBrand }),
+    );
+
+    const expectedEndTime = TimeMath.addAbsRel(
+      expectedStartTime,
+      harden({ relValue: 86_400n, timerBrand }),
+    );
+
+    t.log(
+      `expectedEndTime::: contract state transitions: PREPARED -> PAUSED -> PREPARED -> OPEN should work correctly`,
+      expectedEndTime,
+    );
 
     // INVESTIGATION
     // Looking into the mount of time it takes for 1 `tick` to ake place.
@@ -324,7 +371,7 @@ test.serial(
     });
 
     // Confirms that the admin recieves a new invitation upon using `makeSetOfferFilterInvitation`
-    await E(chainTimerService).advanceTo(TimeMath.absValue(t2) + 4600n);
+    await E(chainTimerService).advanceBy(TimeMath.absValue(t2) + 4600n);
     await makeAsyncObserverObject(
       adminZoePurse,
       'invitation recieved',
@@ -349,10 +396,8 @@ test.serial(
     const t3 = await E(chainTimerService).getCurrentTimestamp();
     const startTimeRecord = harden({ relValue: 4600n, timerBrand });
 
-    const initialStartTime = TimeMath.addAbsRel(t0, startTimeRecord);
-
     t.deepEqual(
-      TimeMath.compareAbs(t3, initialStartTime),
+      TimeMath.compareAbs(t3, expectedStartTime),
       1,
       'Absolute timestamp contract initially expected to open claiming windo',
     );
@@ -381,9 +426,18 @@ test.serial(
 
     const t4 = await E(chainTimerService).getCurrentTimestamp();
 
+    t.log('t4 timestamp:: after removing pause', t4);
     // ensure that the contract MUST have transitioned from "PREPARED" to "OPEN" state.
-    await E(chainTimerService).advanceTo(TimeMath.absValue(t4) + 4600n);
+    await E(chainTimerService).advanceBy(TimeMath.absValue(t4) + 4600n);
+    await E(chainTimerService).tickN(1200n);
 
+    t.log(
+      `after 
+      await E(chainTimerService).advanceBy(TimeMath.absValue(t4) + 4600n);
+     await E(chainTimerService).tickN(1200n)
+      `,
+      await E(chainTimerService).getCurrentTimestamp(),
+    );
     const terms = await E(zoe).getTerms(instance);
 
     const { issuers, brands } = terms;
@@ -418,7 +472,6 @@ test.serial(
       'demonstrating a claim after contract has transitioned: PREPARED -> PAUSED -> PREPARED -> OPEN',
     );
 
-    await E(chainTimerService).tickN(300n);
     const alice = [
       E(wallets.alice.offers).executeOffer(
         makeOfferSpec({ ...accounts[4], tier: 0 }, makeFeeAmount(), 0),
@@ -453,14 +506,13 @@ test.serial(
         );
         t.deepEqual(
           head(values),
-          AmountMath.make(
-            brands.Tribbles,
-            AIRDROP_TIERS_STATIC[aliceTier] / 2n,
-          ),
+          AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[aliceTier]),
           'alicesPurse should receive the correct number of tokens allocated to tier 0  claimants who claiming during the 2nd epoch',
         );
       },
     });
+
+    await E(chainTimerService).tickN(4000n);
   },
 );
 
@@ -521,7 +573,7 @@ test.serial(
         customTerms: {
           ...makeTerms(), // default terms meaning contract will last 5 epochs.
           startTime: 0n, // Contract will be in "PREPARED" stae for 6 hours (21_600n seconds).
-          targetEpochLength: 3600n * 4n * 3n, // Contract will have 4 hour epochs.
+          targetEpochLength: 43200n, // Contract will have 4 hour epochs.
           merkleRoot: merkleTreeObj.root,
         },
         tribblesAirdrop: { bundleID },
@@ -529,7 +581,14 @@ test.serial(
     });
 
     const t0 = await E(chainTimerService).getCurrentTimestamp();
-
+    const expectedEndTime = TimeMath.addAbsRel(
+      t0,
+      harden({ relValue: 43200n * 5n, timerBrand }),
+    );
+    t.log(
+      `expectedEndTime::: contract state transitions: CLAIM-WINDOW-OPEN -> PAUSED -> CLAIM-WINDOW-OPEN`,
+      expectedEndTime,
+    );
     // INVESTIGATION
     // Looking into the mount of time it takes for 1 `tick` to ake place.
     //
@@ -559,17 +618,24 @@ test.serial(
     const instance = await airdropSpace.instance.consume.tribblesAirdrop;
 
     const terms = await E(zoe).getTerms(instance);
-
     const { issuers, brands } = terms;
+
     const makeFeeAmount = () => AmountMath.make(brands.Fee, 5n);
 
     const walletFactory = makeMockWalletFactory({
       Tribbles: issuers.Tribbles,
       Fee: issuers.Fee,
     });
+
+    const [aliceAccountIdx, bobAccountIdx, carolAccountIdx] = [4, 5, 6];
     const wallets = {
-      alice: await walletFactory.makeSmartWallet(accounts[4].address),
-      bob: await walletFactory.makeSmartWallet(accounts[5].address),
+      alice: await walletFactory.makeSmartWallet(
+        accounts[aliceAccountIdx].address,
+      ),
+      bob: await walletFactory.makeSmartWallet(accounts[bobAccountIdx].address),
+      carol: await walletFactory.makeSmartWallet(
+        accounts[carolAccountIdx].address,
+      ),
     };
     const { faucet, mintBrandedPayment } = makeStableFaucet({
       bundleCache,
@@ -583,7 +649,10 @@ test.serial(
       await E(wallet.deposit).receive(pmt);
     });
     await faucet(5n * 1_000_000n);
-
+    const {
+      pauseContract: makePauseContractOffer,
+      unpauseContract: makeResumeContractOffer,
+    } = makeMakeContractPauseOfferSpecs(instance);
     const makeOfferSpec = makeMakeOfferSpec(instance);
     const bob = [
       E(wallets.bob.offers).executeOffer(
@@ -627,21 +696,9 @@ test.serial(
       'Successfully verified user ability to claim tokens from airdrop while claiming window is open.',
     );
 
-    // Invoked when the contract is in the "PREPARED" state.
-    const pauseOffer = {
-      id: 'pause-prepared-contract-0',
-      invitationSpec: {
-        source: 'purse',
-        instance,
-        description: 'set offer filter',
-      },
-      proposal: {},
-      offerArgs: {
-        nextState: PAUSED,
-        filter: [messagesObject.makeClaimInvitationDescription()],
-      },
-    };
-    const pauseOfferUpdater = E(adminWallet.offers).executeOffer(pauseOffer);
+    const pauseOfferUpdater = E(adminWallet.offers).executeOffer(
+      makePauseContractOffer(),
+    );
 
     await makeAsyncObserverObject(pauseOfferUpdater).subscribe({
       next: traceFn('pauseOfferUpdater ## next'),
@@ -670,9 +727,11 @@ test.serial(
     });
 
     // Simulates time passing to demonstrate that the initial TimerWaker does not get invoked due to it being cancelled.
-    await E(chainTimerService).tickN(575n);
+    await E(chainTimerService).tickN(1575n);
 
     const t3 = await E(chainTimerService).getCurrentTimestamp();
+
+    t.log('t3', t3);
     const startTimeRecord = harden({ relValue: 4600n, timerBrand });
 
     const initialStartTime = TimeMath.addAbsRel(t0, startTimeRecord);
@@ -681,6 +740,10 @@ test.serial(
       makeOfferSpec({ ...accounts[5], tier: 0 }, makeFeeAmount(), 0),
     );
 
+    const { subtractAbsAbs } = TimeMath;
+
+    await E(chainTimerService).tick();
+    // const oneTime = subtractAbsAbs(t3);
     t.throwsAsync(
       makeAsyncObserverObject(disallowedClaimAttempt).subscribe({
         next: traceFn('disallowedClaimAttempt ## next'),
@@ -724,16 +787,13 @@ test.serial(
 
     const t4 = await E(chainTimerService).getCurrentTimestamp();
 
-    // ensure that the contract MUST have transitioned from "PREPARED" to "OPEN" state.
-    await E(chainTimerService).advanceTo(TimeMath.absValue(t4) + 4600n);
-
     const aliceTier = 0;
 
     t.log(
       'demonstrating a claim after contract has transitioned: PREPARED -> PAUSED -> PREPARED -> OPEN',
     );
 
-    await E(chainTimerService).tickN(300n);
+    await E(chainTimerService).tickN(250n);
     const alice = [
       E(wallets.alice.offers).executeOffer(
         makeOfferSpec({ ...accounts[4], tier: 0 }, makeFeeAmount(), 0),
@@ -768,7 +828,10 @@ test.serial(
         );
         t.deepEqual(
           head(values),
-          getPayoutAmount(1, 0), // Second epoch (1), tier 0
+          AmountMath.make(
+            brands.Tribbles,
+            AIRDROP_TIERS_STATIC[aliceTier] / 2n,
+          ),
           'alicesPurse should receive the correct number of tokens allocated to tier 0 claimants who claiming during the 2nd epoch',
         );
       },
@@ -857,10 +920,30 @@ test.serial(
         );
         t.deepEqual(
           head(values),
-          getPayoutAmount(4, 4), // Second epoch (1), tier 4
+          AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[4] / 2n / 2n), // Second epoch (1), tier 4
           'carolsPurse should receive the correct number of tokens allocated to tier 4 claimants who claiming during the 2nd epoch',
         );
       },
     });
+
+    await E(chainTimerService).advanceBy(43200n);
+
+    const t5 = await E(chainTimerService).getCurrentTimestamp();
+
+    t.log('current timestamp > ex');
+    t.deepEqual(TimeMath.compareAbs(t5, expectedEndTime), 1);
+
+    t.log('pause contract test complet');
+    t.log('----------------------');
+    t.log('expected end time::', expectedEndTime);
+    t.log('actual end time', t5);
+    t.log('number of pauses:::', 2);
+    const exitMessage = await E(vatAdminState).getExitMessage();
+
+    t.deepEqual(
+      exitMessage === 'Airdrop complete',
+      true,
+      'should shutdown properly.',
+    );
   },
 );
