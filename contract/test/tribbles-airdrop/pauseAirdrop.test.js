@@ -768,11 +768,97 @@ test.serial(
         );
         t.deepEqual(
           head(values),
-          AmountMath.make(
-            brands.Tribbles,
-            AIRDROP_TIERS_STATIC[aliceTier] / 2n,
-          ),
-          'alicesPurse should receive the correct number of tokens allocated to tier 0  claimants who claiming during the 2nd epoch',
+          getPayoutAmount(1, 0), // Second epoch (1), tier 0
+          'alicesPurse should receive the correct number of tokens allocated to tier 0 claimants who claiming during the 2nd epoch',
+        );
+      },
+    });
+
+    // Invoked when the contract is in the "PREPARED" state.
+
+    const secondPauseOfferUpdater = E(adminWallet.offers).executeOffer(
+      makePauseContractOffer('pause-contract-1'),
+    );
+
+    await makeAsyncObserverObject(secondPauseOfferUpdater).subscribe({
+      next: traceFn('pauseOfferUpdater ## next'),
+      error: traceFn('pauseOfferUpdater## Error'),
+      complete: traceFn('pauseOfferUpdater ## complete'),
+    });
+
+    // Confirms that the admin recieves a new invitation upon using `makeSetOfferFilterInvitation`
+    await E(chainTimerService).advanceBy(TimeMath.absValue(t2) + 4600n);
+    await makeAsyncObserverObject(
+      adminZoePurse,
+      'invitation recieved',
+      1,
+    ).subscribe({
+      next: traceFn('ADMIN_WALLET::: NEXT'),
+      error: traceFn('ADMIN WALLET::: ERROR'),
+      complete: async ({ message, values }) => {
+        const [pauseInvitationDetails] = values;
+        t.deepEqual(message, 'invitation recieved');
+        t.deepEqual(pauseInvitationDetails.brand, zoeBrand);
+        t.deepEqual(
+          head(pauseInvitationDetails.value).description,
+          'set offer filter',
+        );
+      },
+    });
+
+    // Simulates time passing to demonstrate that the initial TimerWaker does not get invoked due to it being cancelled.
+    await E(chainTimerService).advanceBy(43200n);
+
+    const resumeContractOfferUpdater = E(adminWallet.offers).executeOffer(
+      makeResumeContractOffer('pause-removal-1', OPEN),
+    );
+
+    await makeAsyncObserverObject(resumeContractOfferUpdater).subscribe({
+      next: traceFn('removePauseOfferUpdater ## next'),
+      error: traceFn('removePauseOfferUpdater## Error'),
+      complete: traceFn('removePauseOfferUpdater ## complete'),
+    });
+
+    // ensure that the contract MUST have transitioned from "PREPARED" to "OPEN" state.
+
+    const carol = [
+      E(wallets.carol.offers).executeOffer(
+        makeOfferSpec(
+          { ...accounts[carolAccountIdx], tier: 3 },
+          makeFeeAmount(),
+          0,
+        ),
+      ),
+      E(wallets.carol.peek).purseUpdates(brands.Tribbles),
+    ];
+
+    const [carolsOfferUpdater, carolsPurse] = carol;
+
+    await makeAsyncObserverObject(carolsOfferUpdater).subscribe({
+      next: traceFn('CarolOffer::1 ### SUBSCRIBE.NEXT'),
+      error: traceFn('CarolOffer::1 ### SUBSCRIBE.ERROR'),
+      complete: ({ message, values }) => {
+        t.deepEqual(message, 'Iterator lifecycle complete.');
+        t.deepEqual(values.length, 4);
+      },
+    });
+
+    await makeAsyncObserverObject(
+      carolsPurse,
+      'AsyncGenerator carolsPurse has fufilled its requirements.',
+      1,
+    ).subscribe({
+      next: traceFn('carolsPurse ### SUBSCRIBE.NEXT'),
+      error: traceFn('carolsPurse #### SUBSCRIBE.ERROR'),
+      complete: ({ message, values }) => {
+        t.deepEqual(
+          message,
+          'AsyncGenerator carolsPurse has fufilled its requirements.',
+        );
+        t.deepEqual(
+          head(values),
+          getPayoutAmount(4, 4), // Second epoch (1), tier 4
+          'carolsPurse should receive the correct number of tokens allocated to tier 4 claimants who claiming during the 2nd epoch',
         );
       },
     });

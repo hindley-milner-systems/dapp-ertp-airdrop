@@ -299,6 +299,7 @@ export const start = async (zcf, privateArgs, baggage) => {
 
   const interfaceGuard = {
     helper: M.interface('Helper', {
+      updatePayoutArray: M.call().returns(M.string()),
       cancelTimer: M.call().returns(M.promise()),
       updateDistributionMultiplier: M.call(M.any()).returns(M.promise()),
       updateEpochDetails: M.call(TimestampShape, M.bigint()).returns(
@@ -388,37 +389,35 @@ export const start = async (zcf, privateArgs, baggage) => {
           const currentTimestamp = await E(timer).getCurrentTimestamp();
           this.state.lastRecordedTimestamp = currentTimestamp;
           TT('new timestamp:', this.state.lastRecordedTimestamp);
-
+          TT('wakeTime', wakeTime);
           void E(timer).setWakeup(
             wakeTime,
             makeWaker(
               'updateDistributionEpochWaker',
               /** @param {TimestampRecord} latestTs */
               ({ absValue: latestTs }) => {
-                this.state.payoutArray = harden(
-                  this.state.payoutArray.map(x => divideAmount(x)),
-                );
+                console.log('this.state.currentEpoch', this.state.currentEpoch);
 
+                // At this point of execution we are transitioning to the next epoch
+                // Before we do that we need to check if the previous epoch was the last one
                 if (this.state.currentEpoch + 1n >= targetNumberOfEpochs) {
-                  TT('Airdrop is ending!', this.state.currentEpoch);
+                  TT('Airdrop is ending!');
+                  TT('this.state.currentEpoch', this.state.currentEpoch);
+                  TT('targetNumberOfEpochs', targetNumberOfEpochs);
                   stateMachine.transitionTo(EXPIRED);
                   zcf.shutdown('Airdrop complete');
-                } else {
-                  TT('SND #### inside updateDistributionMultiplier WAKER', {
-                    payoutArray: this.state.payoutArray,
-                    currentEpoch: this.state.currentEpoch,
-                    lastRecordedTimestamp: this.state.lastRecordedTimestamp,
-                    latestTs,
-                  });
-                  baggage.set('payouts', this.state.payoutArray);
-
-                  TT('currentEpoch', this.state.currentEpoch);
-                  facets.helper.updateEpochDetails(
-                    latestTs,
-                    this.state.currentEpoch + 1n,
-                    this.state.epochLength,
-                  );
                 }
+                TT('inside updateDistributionMultiplier WAKER', {
+                  currentEpoch: this.state.currentEpoch,
+                  lastRecordedTimestamp: this.state.lastRecordedTimestamp,
+                  latestTs,
+                });
+                facets.helper.updatePayoutArray();
+                facets.helper.updateEpochDetails(
+                  latestTs,
+                  this.state.currentEpoch + 1n,
+                  this.state.epochLength,
+                );
               },
               cancelToken,
             ),
@@ -429,9 +428,22 @@ export const start = async (zcf, privateArgs, baggage) => {
         async cancelTimer() {
           await E(timer).cancel(cancelToken);
         },
+        updatePayoutArray() {
+          this.state.payoutArray = harden(
+            this.state.payoutArray.map(x => divideAmount(x)),
+          );
+          const t = l => v => {
+            console.log(l, ':::', v);
+            return v;
+          };
+          console.log(this.state.payoutArray.map(t('Update value')));
+          console.log('------------------------');
+          return `Successfully updated payoutArray`;
+        },
       },
       public: {
         makeClaimTokensInvitation() {
+          console.log('CURRENT EPOCH:::', this.state.currentEpoch);
           assert(
             airdropStatusTracker.get('currentStatus') === AIRDROP_STATES.OPEN,
             messagesObject.makeIllegalActionString(
@@ -543,9 +555,18 @@ export const start = async (zcf, privateArgs, baggage) => {
           switch (nextState) {
             case PREPARED:
               TT('START TIME', baggage.get('startTime'));
-              makeNewCancelToken();
+              this.facets.helper.cancelTimer();
+              console.log('------------------------');
+              console.log('{startTimestamp, currentTimestamp}::', {
+                previousStartTimestamp: startTimestamp,
+                currentTimestamp,
+                newWakeupTimestamp: TimeMath.addAbsRel(
+                  currentTimestamp,
+                  this.state.remainingTime,
+                ),
+              });
               void E(timer).setWakeup(
-                startTimestamp,
+                TimeMath.addAbsRel(currentTimestamp, this.state.remainingTime),
                 makeWaker('claimWindowOpenWaker', ({ absValue }) => {
                   airdropStatusTracker.init('currentEpoch', 1n);
                   this.facets.helper.updateEpochDetails(absValue, 1n);
@@ -555,7 +576,7 @@ export const start = async (zcf, privateArgs, baggage) => {
               );
               break;
             case PAUSED:
-              this.facets.helper.cancelTimer();
+              await this.facets.helper.cancelTimer();
 
               if (
                 TimeMath.compareAbs(
@@ -563,21 +584,43 @@ export const start = async (zcf, privateArgs, baggage) => {
                   this.state.epochStartTime,
                 ) === 1
               ) {
-                this.state.remainingTime = harden({
-                  relValue: this.state.epochLength,
-                  timerBrand,
-                });
+                console.group(`TimeMath.compareAbs(
+                  currentTimestamp,
+                  this.state.epochStartTime,
+                ) === 1:: === TRUE`);
+                this.state.remainingTime = TimeMath.subtractAbsAbs(
+                  currentTimestamp,
+                  this.state.epochStartTime,
+                );
+
+                console.log('------------------------');
+                console.log(
+                  'this.state.remainingTime::',
+                  this.state.remainingTime,
+                );
+                console.groupEnd();
               } else {
+                console.group(`TimeMath.compareAbs(
+                  currentTimestamp,
+                  this.state.epochStartTime,
+                ) === 1:: !== TRUE `);
                 this.state.remainingTime = TimeMath.subtractAbsAbs(
                   this.state.epochEndTime,
                   currentTimestamp,
                 );
+                console.log('------------------------');
+                console.log(
+                  'this.state.remainingTime::',
+                  this.state.remainingTime,
+                );
+                console.groupEnd();
               }
 
               this.state.lastRecordedTimestamp = currentTimestamp;
 
               break;
             case OPEN:
+              this.facets.helper.cancelTimer();
               this.state.epochEndTime = TimeMath.addAbsRel(
                 currentTimestamp,
                 this.state.remainingTime.relValue,
