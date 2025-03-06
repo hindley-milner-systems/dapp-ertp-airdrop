@@ -2,7 +2,7 @@ import { makeMerkleTreeAPI } from '../../src/merkle-tree/index.js';
 
 const TEST_ACCOUNTS = [
   {
-    name: 'wallet-1731277116-1',
+    name: 'alice',
     type: 'local',
     address: 'agoric19265cz9jkld4gnndrqqt2fvexwtt2xzan00zrl',
     pubkey: {
@@ -11,9 +11,10 @@ const TEST_ACCOUNTS = [
     },
     mnemonic:
       'sugar canal sniff fruit photo asset elbow praise result hamster debris sport account cool vessel either guess nominee certain tone crew donkey shed typical',
+    tier: 0,
   },
   {
-    name: 'wallet-1731277116-2',
+    name: 'bob',
     type: 'local',
     address: 'agoric188gu9dkv0ey3h8c79n3xkdjr7aa7p9pw9rrtn5',
     pubkey: {
@@ -22,9 +23,10 @@ const TEST_ACCOUNTS = [
     },
     mnemonic:
       'iron taste nerve parade analyst album feel flush quarter travel capital almost guilt thing symbol fence slab odor very absurd swing cushion erosion myth',
+    tier: 0,
   },
   {
-    name: 'wallet-1731277116-3',
+    name: 'dave',
     type: 'local',
     address: 'agoric1zvkurdadzu0h5dmvrh2hgjj50k55dhwa247rx6',
     pubkey: {
@@ -33,9 +35,10 @@ const TEST_ACCOUNTS = [
     },
     mnemonic:
       'glare orchard detail december kiss child fun orient duty bomb accuse awful fancy stool idea coral dust convince order candy settle layer omit law',
+    tier: 0,
   },
   {
-    name: 'wallet-1731277116-4',
+    name: 'carol',
     type: 'local',
     address: 'agoric1hcangx770kzv2ysjp7gegnan7p2kcx52jadwya',
     pubkey: {
@@ -44,9 +47,10 @@ const TEST_ACCOUNTS = [
     },
     mnemonic:
       'express write casual evil digital oppose job manual actor space cycle what beef estate ranch fish video polar rely together census seat figure addict',
+    tier: 3,
   },
   {
-    name: 'wallet-1731277116-5',
+    name: 'eve',
     type: 'local',
     address: 'agoric19s266pak0llft2gcapn64x5aa37ysqnqzky46y',
     pubkey: {
@@ -55,6 +59,7 @@ const TEST_ACCOUNTS = [
     },
     mnemonic:
       'defy fox marble brand loyal labor salt country kind leg acid claim laundry treat cruel real hundred escape camera pelican gallery student essay veteran',
+    tier: 2,
   },
   {
     name: 'wallet-1731277116-6',

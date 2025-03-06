@@ -33,7 +33,7 @@ import {
 import { makeMockTools } from '../../tools/boot-tools.js';
 import { merkleTreeAPI } from '../../src/merkle-tree/index.js';
 import { makeStableFaucet } from '../mintStable.js';
-import { makeAsyncObserverObject, makeMakeOfferSpec } from './actors.js';
+import { makeAsyncObserverObject, makeMakeOfferSpec } from './test-utils.js';
 import { merkleTreeObj } from './generated_keys.js';
 import { AmountMath } from '@agoric/ertp';
 import '../types.js';

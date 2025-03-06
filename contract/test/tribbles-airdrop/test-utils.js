@@ -1,8 +1,12 @@
 import { E } from '@endo/far';
-import { accounts } from '../data/agd-keys.js';
 import { merkleTreeObj } from './generated_keys.js';
 import { Fn, Observable } from '../../src/helpers/adts.js';
 import { createStore } from '../../src/tribbles/utils.js';
+import {
+  messagesObject,
+  PAUSED,
+  PREPARED,
+} from '../../src/airdrop.contract.js';
 
 const generateInt = x => () => Math.floor(Math.random() * (x + 1));
 
@@ -40,7 +44,30 @@ const makeMakeOfferSpec = instance => (account, feeAmount, id) => ({
   },
 });
 
-const publicKeys = accounts.map(x => x.pubkey.key);
+const makeAccountWithWallet = ({ name, address, pubkey, tier }) => ({
+  address,
+  pubkey,
+  name,
+  tier,
+  proof: merkleTreeObj.constructProof(pubkey),
+});
+
+const testAccounts = merkleTreeObj.accounts
+  .slice(0, 5)
+  .map(makeAccountWithWallet);
+
+const makeTestWallets = async (makeWalletFn, accounts = testAccounts) =>
+  accounts.reduceRight(async (accPromise, account) => {
+    const acc = await accPromise;
+    return {
+      ...acc,
+      [account.name]: {
+        ...account,
+        wallet: await makeWalletFn(account.address),
+      },
+    };
+  }, Promise.resolve({}));
+
 /**
  * @param {import('../../src/types.js').AccountDetails} account
  */
@@ -58,7 +85,7 @@ const handleConstructClaimOffer = account =>
     })),
   );
 
-export const makeOfferArgs = ({
+const makeOfferArgs = ({
   pubkey = {
     key: '',
   },
@@ -114,12 +141,50 @@ const traceFn = label => value => {
   return value;
 };
 
+const AIRDROP_AMOUNT_VALUES = [9000n, 6500n, 3500n, 1500n, 750n].map(
+  x => x * 1_000_000n,
+);
+
+const makeMakeContractPauseOfferSpecs = instance => ({
+  pauseContract: (id = 'pause-prepared-contract-0') => ({
+    id,
+    invitationSpec: {
+      source: 'purse',
+      instance,
+      description: 'set offer filter',
+    },
+    proposal: {},
+    offerArgs: {
+      nextState: PAUSED,
+      filter: [messagesObject.makeClaimInvitationDescription()],
+    },
+  }),
+  unpauseContract: (id = 'remove-pause-0', nextState = PREPARED) => ({
+    id,
+    invitationSpec: {
+      source: 'purse',
+      instance,
+      description: 'set offer filter',
+    },
+    proposal: {},
+    offerArgs: {
+      nextState,
+      filter: [],
+    },
+  }),
+});
+
 export {
+  AIRDROP_AMOUNT_VALUES,
   createTestTier,
   makeAsyncObserverObject,
   handleConstructClaimOffer,
+  makeAccountWithWallet,
+  makeOfferArgs,
   makeClaimOfferArgs,
+  makeMakeContractPauseOfferSpecs,
   makeMakeOfferSpec,
   makePauseOfferSpec,
+  makeTestWallets,
   traceFn,
 };

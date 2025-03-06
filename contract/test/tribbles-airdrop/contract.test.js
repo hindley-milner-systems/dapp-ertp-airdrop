@@ -19,7 +19,6 @@ import { extract } from '@agoric/vats/src/core/utils.js';
 import {
   makeTerms,
   permit,
-  main,
   startAirdrop,
 } from '../../src/airdrop.local.proposal.js';
 import {
@@ -31,65 +30,20 @@ import {
   makeNameProxy,
   makeAgoricNames,
 } from '../../tools/ui-kit-goals/name-service-client.js';
-import { makeMockTools, mockBootstrapPowers } from '../../tools/boot-tools.js';
+import { makeMockTools } from '../../tools/boot-tools.js';
 import { merkleTreeAPI } from '../../src/merkle-tree/index.js';
 import { makeStableFaucet } from '../mintStable.js';
-import { makeOfferArgs } from './actors.js';
+import {
+  makeAsyncObserverObject,
+  makeOfferArgs,
+  AIRDROP_AMOUNT_VALUES,
+  traceFn,
+} from './test-utils.js';
 import { merkleTreeObj } from './generated_keys.js';
 import { AmountMath } from '@agoric/ertp';
-import { Observable, Task } from '../../src/helpers/adts.js';
-import { createStore } from '../../src/tribbles/utils.js';
-import { head } from '../../src/helpers/objectTools.js';
+import { head } from '../../src/helpers/index.js';
 import { messagesObject, OPEN, PAUSED } from '../../src/airdrop.contract.js';
 
-const reducerFn = (state = [], action) => {
-  const { type, payload } = action;
-  switch (type) {
-    case 'NEW_RESULT':
-      return [...state, payload];
-    default:
-      return state;
-  }
-};
-const handleNewResult = result => ({
-  type: 'NEW_RESULT',
-  payload: result.value,
-});
-
-const makeAsyncObserverObject = (
-  generator,
-  completeMessage = 'Iterator lifecycle complete.',
-  maxCount = Infinity,
-) =>
-  Observable(async observer => {
-    const iterator = E(generator);
-    const { dispatch, getStore } = createStore(reducerFn, []);
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      // eslint-disable-next-line @jessie.js/safe-await-separator
-      const result = await iterator.next();
-      if (result.done) {
-        console.log('result.done === true #### breaking loop');
-        break;
-      }
-      dispatch(handleNewResult(result));
-      if (getStore().length === maxCount) {
-        console.log('getStore().length === maxCoutn');
-        break;
-      }
-      observer.next(result.value);
-    }
-    observer.complete({ message: completeMessage, values: getStore() });
-  });
-
-const traceFn = label => value => {
-  console.log(label, '::::', value);
-  return value;
-};
-
-const AIRDROP_TIERS_STATIC = [9000n, 6500n, 3500n, 1500n, 750n].map(
-  x => x * 1_000_000n,
-);
 const { accounts } = merkleTreeObj;
 // import { makeAgdTools } from '../agd-tools.js';
 
@@ -219,8 +173,6 @@ test.serial('makeClaimTokensInvitation happy path::', async t => {
 
   const airdropPowers = extract(permit, powers);
 
-  const { chainTimerService } = airdropPowers.consume;
-
   await startAirdrop(airdropPowers, {
     options: {
       customTerms: {
@@ -317,10 +269,6 @@ test.serial('makeClaimTokensInvitation happy path::', async t => {
   const [alicesOfferUpdates, alicesPurse] = alice;
   const [bobsOfferUpdate, bobsPurse] = bob;
   const [carolsOfferUpdate, carolsPurse] = carol;
-  const [davesOfferUpdater, davesPurse] = dave;
-  /**
-   * @typedef {{value: { updated: string, status: { id: string, invitationSpec: import('../../tools/wallet-tools.js').InvitationSpec, proposal:Proposal, offerArgs: {key: string, proof: []}}}}} OfferResult
-   */
 
   await makeAsyncObserverObject(alicesOfferUpdates).subscribe({
     next: traceFn('SUBSCRIBE.NEXT'),
@@ -345,7 +293,7 @@ test.serial('makeClaimTokensInvitation happy path::', async t => {
       );
       t.deepEqual(
         head(values),
-        AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[aliceTier]),
+        AmountMath.make(brands.Tribbles, AIRDROP_AMOUNT_VALUES[aliceTier]),
       );
     },
   });
@@ -397,7 +345,7 @@ test.serial('makeClaimTokensInvitation happy path::', async t => {
       );
       t.deepEqual(
         head(values),
-        AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[bobTier]),
+        AmountMath.make(brands.Tribbles, AIRDROP_AMOUNT_VALUES[bobTier]),
       );
     },
   });
@@ -431,7 +379,7 @@ test.serial('makeClaimTokensInvitation happy path::', async t => {
       );
       t.deepEqual(
         head(values),
-        AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[bobTier]),
+        AmountMath.make(brands.Tribbles, AIRDROP_AMOUNT_VALUES[bobTier]),
       );
     },
   });
@@ -633,7 +581,6 @@ test.serial(
     const [alicesOfferUpdates, alicesPurse] = alice;
     const [bobsOfferUpdate, bobsPurse] = bob;
     /**
-     * @typedef {{value: { updated: string, status: { id: string, invitationSpec: import('../../tools/wallet-tools.js').InvitationSpec, proposal:Proposal, offerArgs: {key: string, proof: []}}}}} OfferResult
      */
 
     t.throwsAsync(E(alicesOfferUpdates).next(), {
