@@ -3,9 +3,8 @@
 // @jessie-check
 
 /** @import { ERef } from '@endo/eventual-send'; */
-import { q } from '@endo/errors';
 
-export const compose =
+const compose =
   (...fns) =>
   initialValue =>
     fns.reduceRight((acc, val) => val(acc), initialValue);
@@ -13,7 +12,7 @@ export const compose =
 const { entries, fromEntries, keys } = Object;
 
 /** @type { <T extends Record<string, ERef<any>>>(obj: T) => Promise<{ [K in keyof T]: Awaited<T[K]>}> } */
-export const allValues = async obj => {
+const allValues = async obj => {
   // await keyword below leads to "Nested`await`s are not permitted in Jessiees lint jessie.js/no-nested-await"
   // is this "fine" because allValue is used to start contract and is not present in "every day operations".
   const es = await Promise.all(
@@ -24,7 +23,7 @@ export const allValues = async obj => {
 };
 
 /** @type { <V, U, T extends Record<string, V>>(obj: T, f: (v: V) => U) => { [K in keyof T]: U }} */
-export const mapValues = (obj, f) =>
+const mapValues = (obj, f) =>
   fromEntries(
     entries(obj).map(([p, v]) => {
       const entry = [p, f(v)];
@@ -33,21 +32,34 @@ export const mapValues = (obj, f) =>
   );
 
 /** @type {<X, Y>(xs: X[], ys: Y[]) => [X, Y][]} */
-export const zip = (xs, ys) => xs.map((x, i) => [x, ys[i]]);
+const zip = (xs, ys) => xs.map((x, i) => [x, ys[i]]);
 
 // What is <T> ?
 // head :: [x, ...xs] => x
 /** @type {<T>(x: T[]) => T} */
-export const head = ([x, ..._xs]) => x;
+const head = ([x, ..._xs]) => x;
 
-export const objectToMap = (obj, baggage) =>
+const objectToMap = (obj, baggage) =>
   keys(obj).reduce((acc, val) => {
     acc.init(val, obj[val]);
     return acc;
   }, baggage);
 
-export const assign = (a, c) => ({ ...a, ...c });
-export const constructObject = (array = []) => array.reduce(assign, {});
+const assign = (a, c) => ({ ...a, ...c });
+const constructObject = (array = []) => array.reduce(assign, {});
 
-export const pair = (a, b) => [b, a];
-export const concatenate = (a, o) => ({ ...a, ...o });
+const pair = (a, b) => [b, a];
+const concatenate = (a, o) => ({ ...a, ...o });
+
+export {
+  allValues,
+  assign,
+  compose,
+  concatenate,
+  constructObject,
+  head,
+  mapValues,
+  objectToMap,
+  pair,
+  zip,
+};
