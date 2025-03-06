@@ -20,7 +20,6 @@ import { extract } from '@agoric/vats/src/core/utils.js';
 import {
   makeTerms,
   permit,
-  main,
   startAirdrop,
 } from '../../src/airdrop.local.proposal.js';
 import {
@@ -32,105 +31,25 @@ import {
   makeNameProxy,
   makeAgoricNames,
 } from '../../tools/ui-kit-goals/name-service-client.js';
-import { makeMockTools, mockBootstrapPowers } from '../../tools/boot-tools.js';
-import { merkleTreeAPI } from '../../src/merkle-tree/index.js';
+import { makeMockTools } from '../../tools/boot-tools.js';
 import { makeStableFaucet } from '../mintStable.js';
-import { makeOfferArgs } from './actors.js';
+import {
+  AIRDROP_AMOUNT_VALUES,
+  makeAsyncObserverObject,
+  makeOfferArgs,
+  traceFn,
+  makeTestWallets,
+  makeMakeContractPauseOfferSpecs,
+} from './test-utils.js';
 import { merkleTreeObj } from './generated_keys.js';
 import { AmountMath } from '@agoric/ertp';
-import { Observable, Task } from '../../src/helpers/adts.js';
-import { createStore } from '../../src/tribbles/utils.js';
-import { head } from '../../src/helpers/objectTools.js';
+import { head } from '../../src/helpers/index.js';
 import {
   messagesObject,
   OPEN,
   PAUSED,
   PREPARED,
 } from '../../src/airdrop.contract.js';
-
-const reducerFn = (state = [], action) => {
-  const { type, payload } = action;
-  switch (type) {
-    case 'NEW_RESULT':
-      return [...state, payload];
-    default:
-      return state;
-  }
-};
-const handleNewResult = result => ({
-  type: 'NEW_RESULT',
-  payload: result.value,
-});
-
-const makeAsyncObserverObject = (
-  generator,
-  completeMessage = 'Iterator lifecycle complete.',
-  maxCount = Infinity,
-) =>
-  Observable(async observer => {
-    const iterator = E(generator);
-    const { dispatch, getStore } = createStore(reducerFn, []);
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      // eslint-disable-next-line @jessie.js/safe-await-separator
-      const result = await iterator.next();
-      if (result.done) {
-        console.log('result.done === true #### breaking loop');
-        break;
-      }
-      dispatch(handleNewResult(result));
-      if (getStore().length === maxCount) {
-        console.log('getStore().length === maxCoutn');
-        break;
-      }
-      observer.next(result.value);
-    }
-    observer.complete({ message: completeMessage, values: getStore() });
-  });
-
-const traceFn = label => value => {
-  console.log(label, '::::', value);
-  return value;
-};
-const makeMakeContractPauseOfferSpecs = instance => ({
-  pauseContract: (id = 'pause-prepared-contract-0') => ({
-    id,
-    invitationSpec: {
-      source: 'purse',
-      instance,
-      description: 'set offer filter',
-    },
-    proposal: {},
-    offerArgs: {
-      nextState: PAUSED,
-      filter: [messagesObject.makeClaimInvitationDescription()],
-    },
-  }),
-  unpauseContract: (id = 'remove-pause-0', nextState = PREPARED) => ({
-    id,
-    invitationSpec: {
-      source: 'purse',
-      instance,
-      description: 'set offer filter',
-    },
-    proposal: {},
-    offerArgs: {
-      nextState,
-      filter: [],
-    },
-  }),
-});
-const AIRDROP_TIERS_STATIC = [9000n, 6500n, 3500n, 1500n, 750n].map(
-  x => x * 1_000_000n,
-);
-
-const projectValues = (seed, values) =>
-  Array(seed)
-    .fill(0)
-    .reduce(
-      (acc, _, i) => [...acc, values.map(value => value / 2n ** BigInt(i))],
-      [],
-    );
 
 const { accounts } = merkleTreeObj;
 // import { makeAgdTools } from '../agd-tools.js';
@@ -251,7 +170,7 @@ const makeMakeOfferSpec =
  * @async
  */
 test.serial(
-  'contract state transitions: PREPARED -> PAUSED -> PREPARED -> OPEN should work correctly',
+  'contract state transitions: PREPARED -> PAUSED -> PREPARED -> OPEN -> PAUSED -> OPEN should work correctly',
   async t => {
     const merkleRoot = merkleTreeObj.root;
     const { bundleCache } = t.context;
@@ -394,7 +313,6 @@ test.serial(
     await E(chainTimerService).tickN(575n);
 
     const t3 = await E(chainTimerService).getCurrentTimestamp();
-    const startTimeRecord = harden({ relValue: 4600n, timerBrand });
 
     t.deepEqual(
       TimeMath.compareAbs(t3, expectedStartTime),
@@ -446,19 +364,20 @@ test.serial(
       Tribbles: issuers.Tribbles,
       Fee: issuers.Fee,
     });
-    const wallets = {
-      alice: await walletFactory.makeSmartWallet(accounts[4].address),
-    };
+    const wallets = await makeTestWallets(walletFactory.makeSmartWallet);
+
+    const { alice: aliceAccount } = wallets;
+
     const { faucet, mintBrandedPayment } = makeStableFaucet({
       bundleCache,
       feeMintAccess,
       zoe,
     });
 
-    await Object.values(wallets).map(async wallet => {
+    await Object.values(wallets).map(async account => {
       const pmt = await mintBrandedPayment(10n);
       console.log('payment::', pmt);
-      await E(wallet.deposit).receive(pmt);
+      await E(account.wallet.deposit).receive(pmt);
     });
     const makeOfferSpec = makeMakeOfferSpec(instance);
 
@@ -471,12 +390,11 @@ test.serial(
     t.log(
       'demonstrating a claim after contract has transitioned: PREPARED -> PAUSED -> PREPARED -> OPEN',
     );
-
     const alice = [
-      E(wallets.alice.offers).executeOffer(
-        makeOfferSpec({ ...accounts[4], tier: 0 }, makeFeeAmount(), 0),
+      E(aliceAccount.wallet.offers).executeOffer(
+        makeOfferSpec({ ...aliceAccount }, makeFeeAmount(), 0),
       ),
-      E(wallets.alice.peek).purseUpdates(brands.Tribbles),
+      E(aliceAccount.wallet.peek).purseUpdates(brands.Tribbles),
     ];
 
     const [alicesOfferUpdates, alicesPurse] = alice;
@@ -506,7 +424,7 @@ test.serial(
         );
         t.deepEqual(
           head(values),
-          AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[aliceTier]),
+          AmountMath.make(brands.Tribbles, AIRDROP_AMOUNT_VALUES[aliceTier]),
           'alicesPurse should receive the correct number of tokens allocated to tier 0  claimants who claiming during the 2nd epoch',
         );
       },
@@ -627,26 +545,24 @@ test.serial(
       Fee: issuers.Fee,
     });
 
-    const [aliceAccountIdx, bobAccountIdx, carolAccountIdx] = [4, 5, 6];
-    const wallets = {
-      alice: await walletFactory.makeSmartWallet(
-        accounts[aliceAccountIdx].address,
-      ),
-      bob: await walletFactory.makeSmartWallet(accounts[bobAccountIdx].address),
-      carol: await walletFactory.makeSmartWallet(
-        accounts[carolAccountIdx].address,
-      ),
-    };
+    const wallets = await makeTestWallets(walletFactory.makeSmartWallet);
+
+    const {
+      alice: aliceAccount,
+      bob: bobAccount,
+      carol: carolAccount,
+    } = wallets;
+
     const { faucet, mintBrandedPayment } = makeStableFaucet({
       bundleCache,
       feeMintAccess,
       zoe,
     });
 
-    await Object.values(wallets).map(async wallet => {
+    await Object.values(wallets).map(async account => {
       const pmt = await mintBrandedPayment(10n);
       console.log('payment::', pmt);
-      await E(wallet.deposit).receive(pmt);
+      await E(account.wallet.deposit).receive(pmt);
     });
     await faucet(5n * 1_000_000n);
     const {
@@ -655,10 +571,10 @@ test.serial(
     } = makeMakeContractPauseOfferSpecs(instance);
     const makeOfferSpec = makeMakeOfferSpec(instance);
     const bob = [
-      E(wallets.bob.offers).executeOffer(
-        makeOfferSpec({ ...accounts[5], tier: 0 }, makeFeeAmount(), 0),
+      E(bobAccount.wallet.offers).executeOffer(
+        makeOfferSpec({ ...bobAccount }, makeFeeAmount(), 0),
       ),
-      E(wallets.bob.peek).purseUpdates(brands.Tribbles),
+      E(bobAccount.wallet.peek).purseUpdates(brands.Tribbles),
     ];
 
     const [bobsOfferUpdates, bobsPurse] = bob;
@@ -686,7 +602,7 @@ test.serial(
         );
         t.deepEqual(
           head(values),
-          AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[0]),
+          AmountMath.make(brands.Tribbles, AIRDROP_AMOUNT_VALUES[0]),
           'bobsPurse should receive the correct number of tokens allocated to tier 0  claimants who claiming during the 1st epoch',
         );
       },
@@ -736,7 +652,9 @@ test.serial(
 
     const initialStartTime = TimeMath.addAbsRel(t0, startTimeRecord);
 
-    const disallowedClaimAttempt = await E(wallets.bob.offers).executeOffer(
+    const disallowedClaimAttempt = await E(
+      bobAccount.wallet.offers,
+    ).executeOffer(
       makeOfferSpec({ ...accounts[5], tier: 0 }, makeFeeAmount(), 0),
     );
 
@@ -785,8 +703,6 @@ test.serial(
       complete: traceFn('removePauseOfferUpdater ## complete'),
     });
 
-    const t4 = await E(chainTimerService).getCurrentTimestamp();
-
     const aliceTier = 0;
 
     t.log(
@@ -795,10 +711,10 @@ test.serial(
 
     await E(chainTimerService).tickN(250n);
     const alice = [
-      E(wallets.alice.offers).executeOffer(
-        makeOfferSpec({ ...accounts[4], tier: 0 }, makeFeeAmount(), 0),
+      E(aliceAccount.wallet.offers).executeOffer(
+        makeOfferSpec({ ...aliceAccount }, makeFeeAmount(), 0),
       ),
-      E(wallets.alice.peek).purseUpdates(brands.Tribbles),
+      E(aliceAccount.wallet.peek).purseUpdates(brands.Tribbles),
     ];
 
     const [alicesOfferUpdates, alicesPurse] = alice;
@@ -813,6 +729,11 @@ test.serial(
         t.deepEqual(values.length, 4);
       },
     });
+
+    t.log(
+      '------- Contract state transitions: PREPARED --> PAUSED --> PREPARED --> OPEN -------',
+    );
+    t.log('Demonstrated claiming tokens during 1st epoch.');
 
     await makeAsyncObserverObject(
       alicesPurse,
@@ -830,7 +751,7 @@ test.serial(
           head(values),
           AmountMath.make(
             brands.Tribbles,
-            AIRDROP_TIERS_STATIC[aliceTier] / 2n,
+            AIRDROP_AMOUNT_VALUES[aliceTier] / 2n,
           ),
           'alicesPurse should receive the correct number of tokens allocated to tier 0 claimants who claiming during the 2nd epoch',
         );
@@ -872,8 +793,14 @@ test.serial(
     // Simulates time passing to demonstrate that the initial TimerWaker does not get invoked due to it being cancelled.
     await E(chainTimerService).advanceBy(43200n);
 
+    t.log('');
+
     const resumeContractOfferUpdater = E(adminWallet.offers).executeOffer(
       makeResumeContractOffer('pause-removal-1', OPEN),
+    );
+
+    t.log(
+      '------- Contract state transitions: PREPARED --> PAUSED --> PREPARED --> OPEN --> PAUSED --> OPEN -------',
     );
 
     await makeAsyncObserverObject(resumeContractOfferUpdater).subscribe({
@@ -885,14 +812,10 @@ test.serial(
     // ensure that the contract MUST have transitioned from "PREPARED" to "OPEN" state.
 
     const carol = [
-      E(wallets.carol.offers).executeOffer(
-        makeOfferSpec(
-          { ...accounts[carolAccountIdx], tier: 3 },
-          makeFeeAmount(),
-          0,
-        ),
+      E(carolAccount.wallet.offers).executeOffer(
+        makeOfferSpec({ ...carolAccount }, makeFeeAmount(), 0),
       ),
-      E(wallets.carol.peek).purseUpdates(brands.Tribbles),
+      E(carolAccount.wallet.peek).purseUpdates(brands.Tribbles),
     ];
 
     const [carolsOfferUpdater, carolsPurse] = carol;
@@ -920,7 +843,7 @@ test.serial(
         );
         t.deepEqual(
           head(values),
-          AmountMath.make(brands.Tribbles, AIRDROP_TIERS_STATIC[4] / 2n / 2n), // Second epoch (1), tier 4
+          AmountMath.make(brands.Tribbles, AIRDROP_AMOUNT_VALUES[4] / 2n / 2n), // Second epoch (1), tier 4
           'carolsPurse should receive the correct number of tokens allocated to tier 4 claimants who claiming during the 2nd epoch',
         );
       },
