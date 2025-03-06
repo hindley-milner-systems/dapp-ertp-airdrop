@@ -1,6 +1,21 @@
 /**
  * @file contract.test.js
- * @description this test file demonstrates behavior for all contract interaction.
+ * @description Test suite for core airdrop contract functionality
+ * @module test/tribbles-airdrop
+ *
+ * @summary This test suite verifies:
+ * - Contract initialization and deployment
+ * - Token claiming mechanisms
+ * - Merkle proof validation
+ * - Fee handling and token distribution
+ * - Wallet integration
+ * - Brand/Issuer management
+ * - Multi-user claim scenarios
+ * - Error cases and edge conditions
+ *
+ * @requires @agoric/ertp
+ * @requires @agoric/zoe
+ * @requires @endo/far
  */
 
 /* eslint-disable import/order */
