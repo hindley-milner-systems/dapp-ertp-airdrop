@@ -322,7 +322,7 @@ export const start = async (zcf, privateArgs, baggage) => {
   const prepareContract = zone.exoClassKit(
     'Tribble Token Distribution',
     interfaceGuard,
-    (store, genesisTimestamp, epochLengthRelTimeRecord) => ({
+    (store, genesisTimestamp, epochLengthRelTimeRecord, numberOfEpochs) => ({
       claimCount: 0,
       epochLength: epochLengthRelTimeRecord,
       epochStartTime: genesisTimestamp,
@@ -336,7 +336,7 @@ export const start = async (zcf, privateArgs, baggage) => {
         epochLengthRelTimeRecord,
       ),
       claimedAccounts: store,
-      targetNumberOfEpochs,
+      targetNumberOfEpochs: numberOfEpochs,
       payoutArray: baggage.get('payouts'),
       currentEpoch: null,
     }),
@@ -344,20 +344,48 @@ export const start = async (zcf, privateArgs, baggage) => {
       helper: {
         /**
          * @param {TimestampRecord} absTime
-         * @param {bigint} epochIdx
+         * @param {bigint} nextEpoch
          * @param epochLength
          */
-        updateEpochDetails(absTime, epochIdx, epochLength = targetEpochLength) {
+        updateEpochDetails(
+          absTime,
+          nextEpoch,
+          epochLength = targetEpochLength,
+        ) {
+          TT('nextEpoch', nextEpoch);
           const { helper } = this.facets;
-          this.state.currentEpoch = epochIdx;
-          TT('epoch starting:::', {
-            currentEpoch: this.state.currentEpoch,
-            targetNumberOfEpochs: this.state.targetNumberOfEpochs,
-          });
-
-          void helper.updateDistributionMultiplier(
-            TimeMath.addAbsRel(absTime, toRT(epochLength)),
+          console.log('targetNumberOfEpochs', targetNumberOfEpochs);
+          console.log(
+            '(this.state.targetNumberOfEpochs)',
+            this.state.targetNumberOfEpochs,
           );
+          if (nextEpoch > targetNumberOfEpochs) {
+            makeNewCancelToken();
+            void E(timer).setWakeup(
+              TimeMath.addAbsRel(absTime, toRT(epochLength)),
+              makeWaker(
+                'updateDistributionEpochWaker',
+                /** @param {TimestampRecord} latestTs */
+                ({ absValue: latestTs }) => {
+                  console.log(
+                    'Airdrop complete. ',
+                    TimeMath.absValue(latestTs),
+                  );
+                  stateMachine.transitionTo(EXPIRED);
+                  zcf.shutdown(
+                    `Airdrop complete. ${TimeMath.absValue(latestTs)}`,
+                  );
+                },
+                cancelToken,
+              ),
+            );
+          } else {
+            this.state.currentEpoch = nextEpoch;
+
+            void helper.updateDistributionMultiplier(
+              TimeMath.addAbsRel(absTime, toRT(epochLength)),
+            );
+          }
         },
         /**
          * Configures and manages timer wake-up events for epoch transitions and token distribution updates.
@@ -400,18 +428,7 @@ export const start = async (zcf, privateArgs, baggage) => {
 
                 // At this point of execution we are transitioning to the next epoch
                 // Before we do that we need to check if the previous epoch was the last one
-                if (this.state.currentEpoch + 1n >= targetNumberOfEpochs) {
-                  TT('Airdrop is ending!');
-                  TT('this.state.currentEpoch', this.state.currentEpoch);
-                  TT('targetNumberOfEpochs', targetNumberOfEpochs);
-                  stateMachine.transitionTo(EXPIRED);
-                  zcf.shutdown('Airdrop complete');
-                }
-                TT('inside updateDistributionMultiplier WAKER', {
-                  currentEpoch: this.state.currentEpoch,
-                  lastRecordedTimestamp: this.state.lastRecordedTimestamp,
-                  latestTs,
-                });
+
                 facets.helper.updatePayoutArray();
                 facets.helper.updateEpochDetails(
                   latestTs,
@@ -568,7 +585,13 @@ export const start = async (zcf, privateArgs, baggage) => {
               void E(timer).setWakeup(
                 TimeMath.addAbsRel(currentTimestamp, this.state.remainingTime),
                 makeWaker('claimWindowOpenWaker', ({ absValue }) => {
+                  TT('claimwindowOpenWaker fired:::', {
+                    absValue,
+                    remainingTime: this.state.remainingTime,
+                    epochLength: this.state.epochLength,
+                  });
                   airdropStatusTracker.init('currentEpoch', 1n);
+                  this.state.remainingTime = this.state.epochLength;
                   this.facets.helper.updateEpochDetails(absValue, 1n);
                   stateMachine.transitionTo(OPEN);
                 }),
@@ -673,7 +696,12 @@ export const start = async (zcf, privateArgs, baggage) => {
     creator: creatorFacet,
     helper,
     public: publicFacet,
-  } = prepareContract(airdropStatusTracker, startTimestamp, epochLengthTs);
+  } = prepareContract(
+    airdropStatusTracker,
+    startTimestamp,
+    epochLengthTs,
+    targetNumberOfEpochs,
+  );
 
   TT('START TIME', baggage.get('startTime'));
   makeNewCancelToken();
