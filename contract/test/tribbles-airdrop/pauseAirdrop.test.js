@@ -857,9 +857,7 @@ test.serial(
 
     const disallowedClaimAttempt = await E(
       bobAccount.wallet.offers,
-    ).executeOffer(
-      makeOfferSpec({ ...accounts[5], tier: 0 }, makeFeeAmount(), 0),
-    );
+    ).executeOffer(makeOfferSpec({ ...bobAccount }, makeFeeAmount(), 0));
 
     await E(chainTimerService).tick();
 
