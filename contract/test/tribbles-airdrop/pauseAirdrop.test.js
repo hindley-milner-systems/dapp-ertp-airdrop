@@ -686,7 +686,7 @@ test.serial(
     t.log(`⏱️ Total contract duration: ${43200n * 5n} seconds (5 epochs)`);
     // Advance time slightly to ensure contract is in
     // INVESTIGATION
-    // Looking into the mount of time it takes for 1 `tick` to ake place.
+    // Looking into the amount of time it takes for 1 `tick` to take place.
     //
     await E(chainTimerService).tickN(50n);
     const t2 = await E(chainTimerService).getCurrentTimestamp();
