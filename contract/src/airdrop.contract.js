@@ -364,15 +364,14 @@ export const start = async (zcf, privateArgs, baggage) => {
             void E(timer).setWakeup(
               TimeMath.addAbsRel(absTime, toRT(epochLength)),
               makeWaker(
-                'updateDistributionEpochWaker',
+                'claimPeriodEndedWaker',
                 /** @param {TimestampRecord} latestTs */
                 ({ absValue: latestTs }) => {
                   console.log(
                     'Airdrop complete. ',
                     TimeMath.absValue(latestTs),
                   );
-                  stateMachine.transitionTo(EXPIRED);
-                  zcf.shutdown(
+                  return zcf.shutdown(
                     `Airdrop complete. ${TimeMath.absValue(latestTs)}`,
                   );
                 },
@@ -449,12 +448,7 @@ export const start = async (zcf, privateArgs, baggage) => {
           this.state.payoutArray = harden(
             this.state.payoutArray.map(x => divideAmount(x)),
           );
-          const t = l => v => {
-            console.log(l, ':::', v);
-            return v;
-          };
-          console.log(this.state.payoutArray.map(t('Update value')));
-          console.log('------------------------');
+
           return `Successfully updated payoutArray`;
         },
       },
