@@ -1098,6 +1098,7 @@ test.serial(
     // Advance to contract end and verify shutdown
     t.log('⏱️ TEST PHASE: Advancing to Contract End');
     t.log('⏱️ Advancing time by two more epochs (86,400 seconds)');
+    t.log('⏱️ Advancing time by two more epochs (86,400 seconds = 43,200 * 2)');
     await E(chainTimerService).advanceBy(43200n * 2n);
 
     const t5 = await E(chainTimerService).getCurrentTimestamp();
