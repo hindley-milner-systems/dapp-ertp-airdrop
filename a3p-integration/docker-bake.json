@@ -1,0 +1,12 @@
+{
+  "variable": {
+    "PLATFORMS": {
+      "default": null
+    },
+    "PROPOSALS": {
+      "default": [
+        "tribbles"
+      ]
+    }
+  }
+}
