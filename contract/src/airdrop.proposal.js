@@ -115,8 +115,7 @@ const defaultConfig = {
  * }} config
  *   XXX export AirdropTerms record from contract
  */
-
-export const startAirdrop = async (powers, config = defaultConfig) => {
+const startAirdrop = async (powers, config = defaultConfig) => {
   trace('######## inside startAirdrop ###########');
   trace('config ::::', config);
   trace('----------------------------------');
@@ -268,7 +267,7 @@ const airdropManifest = harden({
   },
 });
 
-export const getManifestForAirdrop = (
+const getManifestForAirdrop = (
   { restoreRef },
   {
     installKeys,
@@ -284,42 +283,19 @@ export const getManifestForAirdrop = (
   trace('getManifestForAirdrop');
   trace('installKeys', installKeys);
   trace('options ::::', options);
+  const contractInstallation = installKeys[contractName];
+
+  console.log('------------------------');
+  console.log('contractInstallation::', contractInstallation);
   return harden({
     manifest: airdropManifest,
     installations: {
-      tribblesAirdrop: restoreRef(installKeys.tribblesAirdrop),
+      [contractName]: restoreRef(contractInstallation),
     },
     options,
   });
 };
 
-export const permit = Object.values(airdropManifest)[0];
+const permit = Object.values(airdropManifest)[0];
 
-/** @type {import('@agoric/deploy-script-support/src/externalTypes.js').CoreEvalBuilder} */
-export const defaultProposalBuilder = async ({ publishRef, install }) => {
-  return harden({
-    // Somewhat unorthodox, source the exports from this builder module
-    sourceSpec:
-      '/workspaces/dapp-ertp-airdrop/contract/src/airdrop.proposal.js',
-    getManifestCall: [
-      'getManifestForAirdrop',
-      {
-        installKeys: {
-          tribblesAirdrop: publishRef(
-            install(
-              '/workspaces/dapp-ertp-airdrop/contract/src/airdrop.contract.js',
-            ),
-          ),
-        },
-      },
-    ],
-  });
-};
-
-export default async (homeP, endowments) => {
-  // import dynamically so the module can work in CoreEval environment
-  const dspModule = await import('@agoric/deploy-script-support');
-  const { makeHelpers } = dspModule;
-  const { writeCoreEval } = await makeHelpers(homeP, endowments);
-  await writeCoreEval(startAirdrop.name, defaultProposalBuilder);
-};
+export { contractName, getManifestForAirdrop, permit, startAirdrop };

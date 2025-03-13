@@ -6,12 +6,12 @@ import { makeE2ETools } from './e2e-tools.js';
 
 export const makeAgdTools = async (
   log = console.log,
-  { execFileFn = execFile, execFileSyncFn = execFileSync },
+  { execFile, execFileSync },
 ) => {
   const bundleCache = await unsafeMakeBundleCache('bundles');
   const tools = await makeE2ETools(log, bundleCache, {
-    execFileSync: execFileSyncFn,
-    execFile: execFileFn,
+    execFileSync,
+    execFile,
     fetch,
     setTimeout,
   });
@@ -20,7 +20,7 @@ export const makeAgdTools = async (
 
 const tracer = makeTracer('DEPLOY TRACER');
 const AgdTools = makeAgdTools(tracer, {
-  execFileFn: execFile,
-  execFileSyncFn: execFileSync,
+  execFile,
+  execFileSync,
 });
 export { AgdTools };

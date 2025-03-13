@@ -16,13 +16,13 @@ import {
 import { decodeBase64 } from '@endo/base64';
 import { divideBy } from '@agoric/zoe/src/contractSupport/ratio.js';
 import { makeTracer, mustMatch } from '@agoric/internal';
-import { makeWaker, oneDay } from './helpers/time.js';
+import { makeWaker, oneDay, makeToRT } from './helpers/time.js';
 import {
   handleFirstIncarnation,
   makeCancelTokenMaker,
 } from './helpers/validation.js';
 import { makeStateMachine } from './helpers/stateMachine.js';
-import { objectToMap } from './helpers/objectTools.js';
+import { objectToMap, compose } from './helpers/objectTools.js';
 import { getMerkleRootFromMerkleProof } from './merkle-tree/index.js';
 import '@agoric/zoe/exported.js';
 
@@ -36,11 +36,6 @@ const OfferArgsShape = harden({
   key: M.string(),
   proof: M.arrayOf(ProofDataShape),
 });
-
-const compose =
-  (...fns) =>
-  args =>
-    fns.reduceRight((x, f) => f(x), args);
 
 const toAgoricBech = (data, limit) =>
   bech32.encode('agoric', bech32.toWords(data), limit);
@@ -175,12 +170,6 @@ const tokenMintFactory = async (
   };
 };
 
-const makeToTS = timerBrand => value =>
-  TimeMath.coerceTimestampRecord(value, timerBrand);
-const fromTS = ts => TimeMath.absValue(ts);
-const makeToRT = timerBrand => value =>
-  TimeMath.coerceRelativeTimeRecord(value, timerBrand);
-
 /**
  * @param {TimestampRecord} sourceTs Base timestamp used to as the starting time
  *   which a new Timestamp will be created against.
@@ -256,7 +245,7 @@ export const start = async (zcf, privateArgs, baggage) => {
     tokenMintFactory(zcf, tokenName),
   ]);
 
-  const [toTS, toRT] = [makeToTS(timerBrand), makeToRT(timerBrand)];
+  const toRT = makeToRT(timerBrand);
 
   let cancelToken = null;
   const makeNewCancelToken = () => {
@@ -345,7 +334,7 @@ export const start = async (zcf, privateArgs, baggage) => {
         /**
          * @param {TimestampRecord} absTime
          * @param {bigint} nextEpoch
-         * @param epochLength
+         * @param {bigint} epochLength
          */
         updateEpochDetails(
           absTime,
@@ -353,6 +342,10 @@ export const start = async (zcf, privateArgs, baggage) => {
           epochLength = targetEpochLength,
         ) {
           TT('nextEpoch', nextEpoch);
+          TT(
+            'epochLength'.toUpperCase().concat(' ###############'),
+            epochLength,
+          );
           const { helper } = this.facets;
           console.log('targetNumberOfEpochs', targetNumberOfEpochs);
           console.log(
