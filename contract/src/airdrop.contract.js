@@ -342,10 +342,6 @@ export const start = async (zcf, privateArgs, baggage) => {
           epochLength = targetEpochLength,
         ) {
           TT('nextEpoch', nextEpoch);
-          TT(
-            'epochLength'.toUpperCase().concat(' ###############'),
-            epochLength,
-          );
           const { helper } = this.facets;
           console.log('targetNumberOfEpochs', targetNumberOfEpochs);
           console.log(
