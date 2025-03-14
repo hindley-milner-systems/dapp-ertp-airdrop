@@ -1,4 +1,4 @@
-name: IntegratOion Tests
+name: Integration Tests
 
 on:
   pull_request:
@@ -60,6 +60,9 @@ jobs:
       - name: Override Chain Registry
         run: make override-chain-registry
         working-directory: ./e2e-testing
+
+      - name: Run Integration Test
+        run: yarn integration-test
 
       - name: Capture and print agoric validator logs
         if: always()
