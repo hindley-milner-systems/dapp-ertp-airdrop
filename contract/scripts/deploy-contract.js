@@ -89,7 +89,7 @@ const main = async (bundleDir = 'bundles') => {
   };
 
   const t = mockExecutionContext();
-  const tools = makeE2ETools(t, bundleCache, {
+  const tools = makeE2ETools(console.log, bundleCache, {
     execFile,
     execFileSync: service === '.' ? execFileSync : dockerExec,
     fetch,

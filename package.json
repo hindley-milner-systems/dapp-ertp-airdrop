@@ -5,8 +5,7 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "contract",
-    "ui"
+    "contract"
   ],
   "packageManager": "yarn@4.4.0",
   "useWorkspaces": true,
@@ -24,9 +23,8 @@
     "make:help": "make -C contract list",
     "start:contract": "cd contract && yarn start",
     "integration-test": "cd contract && yarn ava ./test/orca-multichain.test.js",
-    "start:ui": "cd ui && yarn dev",
-    "format": "yarn prettier --write .github contract ui",
-    "lint:format": "yarn prettier --check .github contract ui",
+    "format": "yarn prettier --write .github contract",
+    "lint:format": "yarn prettier --check .github contract",
     "lint": "yarn lint:format && yarn workspaces foreach --all run lint",
     "lint:fix": "yarn format && yarn workspaces foreach --all run lint:fix",
     "test": "yarn workspaces foreach --all run test",
@@ -38,6 +36,7 @@
     "prettier": "^3.3.3",
     "prettier-plugin-tailwindcss": "^0.5.11",
     "ts-node": "^10.9.2",
+    "tsx": "^4.19.1",
     "typescript": "^5.5.2"
   },
   "prettier": {
@@ -49,6 +48,7 @@
     ]
   },
   "dependencies": {
+    "@agoric/vats": "0.16.0-u19.1",
     "@noble/hashes": "^1.5.0"
   }
 }

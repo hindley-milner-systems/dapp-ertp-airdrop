@@ -29,7 +29,7 @@ dist-ssr
 
 contract/ADTs.md
 contract/,tx.json
-
+vercel.json
 
 .yarn/*
 

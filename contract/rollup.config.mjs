@@ -16,10 +16,17 @@ import {
   moduleToScript,
   configureBundleID,
   emitPermit,
-  configureOptions,
 } from './tools/rollup-plugin-core-eval.js';
+
+// import { permit as daoPermit } from './src/privacy-coin.proposal.js';
 import { permit as airdropPermit } from './src/airdrop.proposal.js';
-import { permit as boardAuxPermit } from './src/platform-goals/board-aux.core.js';
+
+// symlinks
+// import { nodeResolve } from '@rollup/plugin-node-resolve';
+// import commonjs from '@rollup/plugin-commonjs';
+// import json from '@rollup/plugin-json';
+// import replace from '@rollup/plugin-replace';
+// import typescript from '@rollup/plugin-typescript';
 
 /**
  * @param {*} opts
@@ -30,7 +37,7 @@ const config1 = ({
   coreEntry = `./src/${name}.proposal.js`,
   contractEntry = `./src/${name}.contract.js`,
   coreScript = `bundles/deploy-${name}.js`,
-  coreScriptOptions = undefined,
+  _coreScriptOptions = undefined,
   permitFile = `deploy-${name}-permit.json`,
   permit,
 }) => ({
@@ -52,32 +59,45 @@ const config1 = ({
           }),
         ]
       : []),
-    ...(coreScriptOptions
-      ? [configureOptions({ options: coreScriptOptions })]
-      : []),
+    // ...(coreScriptOptions
+    //   ? [configureOptions({ options: coreScriptOptions })]
+    //   : []),
     moduleToScript(),
     emitPermit({ permit, file: permitFile }),
+    // nodeResolve({
+    //   preferBuiltins: true,
+    //   mainFields: ['module', 'main'],
+    //   // moduleDirectories: ['node_modules'],
+    //   moduleDirectories: ['node_modules'],
+    //   // modulePaths: ['../../agoric-sdk/packages'],
+    //   dedupe: ['@agoric/vow', '@agoric/orchestration', '@agoric/vats'],
+    // }),
+    // commonjs(),
+    // json(),
+    // replace({
+    //   'process.env.NODE_ENV': JSON.stringify('production'),
+    //   preventAssignment: true,
+    // }),
+    // typescript({
+    //   tsconfig: './tsconfig.json',  // Ensure you have a tsconfig.json file in your project root
+    // }),
   ],
 });
 
-const { env } = process;
+// const { env } = process;
 
 /** @type {import('rollup').RollupOptions[]} */
 const config = [
-  // is this needed for sell-concert-tickets to work?
-  config1({
-    name: 'board-aux',
-    permit: boardAuxPermit,
-    coreEntry: `./src/platform-goals/board-aux.core.js`,
-    contractEntry: null,
-  }),
+  // config1({
+  //   name: 'board-aux',
+  //   permit: boardAuxPermit,
+  //   coreEntry: `./src/platform-goals/board-aux.core.js`,
+  //   contractEntry: null,
+  // }),
   config1({
     name: 'airdrop',
     permit: airdropPermit,
-    coreScriptOptions: {
-      merkleRoot:
-        '9a5e4cc906ea7511c776b9ef1d6c59ddb7c64c34848f6c58e982b168cc34849b',
-    },
   }),
 ];
+
 export default config;

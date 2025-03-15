@@ -1,4 +1,5 @@
 import { Far } from '@endo/marshal';
+import { TimeMath } from '@agoric/time';
 import { uncurry } from './lenses.js';
 
 /**
@@ -60,6 +61,18 @@ const ONE_HOUR = uMult(SIXTY, SIXTY);
 const oneDay = uMult(ONE_HOUR, 24n);
 
 /**
+ * @param {import('@agoric/time/src/types.js').TimestampRecord} sourceTs Base timestamp used to as the starting time
+ *   which a new Timestamp will be created against.
+ * @param {import('@agoric/time/src/types.js').RelativeTimeRecord} inputTs Relative timestamp spanning the
+ *   interval of time between sourceTs and the newly created timestamp
+ */
+const createFutureTs = (sourceTs, inputTs) =>
+  TimeMath.absValue(sourceTs) + TimeMath.relValue(inputTs);
+
+const makeToRT = timerBrand => value =>
+  TimeMath.coerceRelativeTimeRecord(value, timerBrand);
+
+/**
  * Represents the number of seconds in one week.
  *
  * @constant {bigint}
@@ -109,10 +122,12 @@ const makeWaker = (name, func) => {
 };
 
 export {
+  createFutureTs,
   makeCancelTokenMaker,
   makeWaker,
   oneDay,
   oneWeek,
+  makeToRT,
   ONE_THOUSAND,
   SIXTY,
 };
