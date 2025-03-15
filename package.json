@@ -5,8 +5,7 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "contract",
-    "ui"
+    "contract"
   ],
   "packageManager": "yarn@4.4.0",
   "useWorkspaces": true,
@@ -24,9 +23,8 @@
     "make:help": "make -C contract list",
     "start:contract": "cd contract && yarn start",
     "integration-test": "cd contract && yarn ava ./test/orca-multichain.test.js",
-    "start:ui": "cd ui && yarn dev",
-    "format": "yarn prettier --write .github contract ui",
-    "lint:format": "yarn prettier --check .github contract ui",
+    "format": "yarn prettier --write .github contract",
+    "lint:format": "yarn prettier --check .github contract",
     "lint": "yarn lint:format && yarn workspaces foreach --all run lint",
     "lint:fix": "yarn format && yarn workspaces foreach --all run lint:fix",
     "test": "yarn workspaces foreach --all run test",
