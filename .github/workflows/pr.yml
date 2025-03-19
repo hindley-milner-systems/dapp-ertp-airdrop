@@ -1,11 +1,10 @@
-name: Lint and Test
+name: Unit Tests
 
 on:
   pull_request:
-  merge_group:
 
 jobs:
-  all:
+  unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

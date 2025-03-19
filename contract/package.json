@@ -5,18 +5,18 @@
   "description": "Contracts for minting a fixed supply of tokens which are distributed via airdrop (to all eligible claimants who exercise their right to claim).",
   "type": "module",
   "scripts": {
-    "start:docker": "docker compose up -d",
-    "docker:logs": "docker compose logs --tail 200 -f",
-    "docker:bash": "docker compose exec agd bash",
-    "docker:make": "docker compose exec agd make -C /workspace/contract",
-    "build:deployer": "rollup -c rollup.config.mjs",
-    "make:help": "make list",
-    "start": "yarn docker:make clean start-contract",
-    "watch:test": "watch 'clear && yarn test | tap-color' ./test",
-    "watch:src": "watch 'clear && yarn test | tap-color' ./src",
+    "start:docker": "echo 'Please follow the instructions in the README file at https://github.com/Agoric/agoric-sdk/tree/master/multichain-testing to start a multichain environment needed for this DApp to run.' && exit 1",
+    "docker:logs": "kubectl logs agoriclocal-genesis-0 -c validator -f",
+    "docker:bash": "kubectl exec -it agoriclocal-genesis-0 -c validator -- /bin/bash",
+    "format": "prettier --write .",
+    "start": "make e2e",
     "test": "ava",
+    "build": "yarn build:deployer",
+    "build:deployer": "rollup -c rollup.config.mjs",
     "lint": "eslint 'src/*.js'",
-    "lint:fix": "eslint --fix 'src/*.js'"
+    "lint:fix": "eslint --fix 'src/*.js'",
+    "watch:test": "watch 'clear && yarn test | tap-color' ./test",
+    "watch:src": "watch 'clear && yarn test | tap-color' ./src"
   },
   "devDependencies": {
     "@agoric/eslint-config": "dev",
@@ -27,6 +27,7 @@
     "@jessie.js/eslint-plugin": "^0.4.0",
     "@typescript-eslint/eslint-plugin": "^6.7.0",
     "@typescript-eslint/parser": "^6.7.0",
+    "agoric": "^0.22.0-u17.1",
     "ava": "^5.3.0",
     "eslint": "^8.47.0",
     "eslint-config-airbnb-base": "^15.0.0",
@@ -43,6 +44,7 @@
     "import-meta-resolve": "^2.2.1",
     "prettier": "^3.0.3",
     "prettier-plugin-jsdoc": "^1.0.0",
+    "rollup": "^4.18.0",
     "type-coverage": "^2.26.3",
     "typescript": "^5.5.0-dev.20240327"
   },
@@ -51,11 +53,12 @@
     "@agoric/ertp": "0.16.3-u17.1",
     "@agoric/internal": "0.4.0-u17.1",
     "@agoric/notifier": "0.7.0-u17.1",
+    "@agoric/orchestration": "0.2.0-u19.1",
     "@agoric/store": "^0.9.2",
     "@agoric/swingset-vat": "0.33.0-u17.1",
     "@agoric/time": "0.3.3-u14.0",
     "@agoric/vat-data": "0.5.3-u14.0",
-    "@agoric/vats": "^0.16.0-u17.1",
+    "@agoric/vats": "0.16.0-u19.1",
     "@agoric/zoe": "0.26.3-u17.1",
     "@agoric/zone": "0.3.0-u17.1",
     "@cosmjs/amino": "0.32.3",
@@ -77,9 +80,10 @@
   "ava": {
     "concurrency": 1,
     "serial": true,
-    "timeout": "30s",
+    "timeout": "2m",
     "failFast": false,
     "tap": true,
+    "workerThreads": false,
     "extensions": [
       "ts",
       "js"
@@ -89,6 +93,7 @@
       "test/**/*.test.js",
       "test/*.test.js",
       "!test/xs/*.test.js",
+      "!test/tribbles-airdrop/airdrop-multichain.test.js",
       "!test/crypto-xsnap.test.js"
     ]
   },

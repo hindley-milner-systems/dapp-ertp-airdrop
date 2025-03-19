@@ -4,14 +4,14 @@
   "permit": "startAirdrop-permit.json",
   "bundles": [
     {
-      "entrypoint": "./src/airdrop.contract.js",
-      "bundleID": "b1-a2ee9dafe70d201a6661e3b599a19e3df2afdb67fca247f24be7268f4bb624e88de60317d2f368c276d97bfc415b96a0b9a75d5348c0b93bc774be674a922f2a",
-      "fileName": "/Users/tgreco/.agoric/cache/b1-a2ee9dafe70d201a6661e3b599a19e3df2afdb67fca247f24be7268f4bb624e88de60317d2f368c276d97bfc415b96a0b9a75d5348c0b93bc774be674a922f2a.json"
+      "entrypoint": "../src/airdrop.contract.js",
+      "bundleID": "b1-63233d931fb53e66f4da7f0e845960b0990a44089d00e8f8ef8280faa203ccb9aad4202a29feb5c0ffa8c81b2147560a1928d19cf935fde106c44c73a8b5a041",
+      "fileName": "/Users/tgreco/.agoric/cache/b1-63233d931fb53e66f4da7f0e845960b0990a44089d00e8f8ef8280faa203ccb9aad4202a29feb5c0ffa8c81b2147560a1928d19cf935fde106c44c73a8b5a041.json"
     },
     {
-      "entrypoint": "./src/airdrop.proposal.js",
-      "bundleID": "b1-fc79d355ebf00a9d228202fe4329d481f30a5107dc68fc1e56e868d22c91f1fe9fa80dbfc2a8783639707ed468e09d45cb12540b46813ee30594ebaf10cd08b8",
-      "fileName": "/Users/tgreco/.agoric/cache/b1-fc79d355ebf00a9d228202fe4329d481f30a5107dc68fc1e56e868d22c91f1fe9fa80dbfc2a8783639707ed468e09d45cb12540b46813ee30594ebaf10cd08b8.json"
+      "entrypoint": "../src/airdrop.proposal.js",
+      "bundleID": "b1-8e24083222089ba0c289d89688f281300e768b661772b5b76ff0bd5c7116e44066800202e62920bfb2b1f18a8de48c5b5f1a389ee68077c0cd5c8fae5e3ec686",
+      "fileName": "/Users/tgreco/.agoric/cache/b1-8e24083222089ba0c289d89688f281300e768b661772b5b76ff0bd5c7116e44066800202e62920bfb2b1f18a8de48c5b5f1a389ee68077c0cd5c8fae5e3ec686.json"
     }
   ]
 }

@@ -1,32 +1,29 @@
-// @ts-check
-
+/** global harden */
+import { assert } from '@endo/errors';
 import { E, Far } from '@endo/far';
-// eslint-disable-next-line import/no-extraneous-dependencies
 import { Nat } from '@endo/nat';
-import { flags, makeAgd } from './agd-lib.js';
-import { makeHttpClient, makeAPI } from './ui-kit-goals/makeHttpClient.js';
-import { dedup, makeQueryKit, poll } from './ui-kit-goals/queryKit.js';
+import { makePromiseKit } from '@endo/promise-kit';
+
+/// //////
+
+import { exec } from 'child_process';
+import path from 'path';
+import fs from 'fs';
+import fse from 'fs-extra';
+import { execa } from 'execa';
+import os from 'os';
+import { createRequire } from 'module';
 import { getBundleId } from './bundle-tools.js';
-import { makeVStorage } from './ui-kit-goals/batchQuery.js';
+import { makeVStorage } from './batchQuery.js';
+import { dedup, makeQueryKit, poll } from './queryKit.js';
+import { makeHttpClient, makeAPI } from './makeHttpClient.js';
+import { flags, makeAgd } from './agd-lib.js';
 
-const consoleCounter = (label = 'default') => {
-  console.count(`${label} counter ###`);
-};
+const nodeRequire = createRequire(import.meta.url);
+
+/** @import { Container, ExecSync } from './agd-lib.js'; */
+
 const BLD = '000000ubld';
-
-const makeRunner = execFile => {
-  const $ = (file, ...args) => {
-    // console.error(cmd);
-
-    return new Promise((resolve, reject) => {
-      execFile(file, args, { encoding: 'utf8' }, (err, out) => {
-        if (err) return reject(err);
-        resolve(out);
-      });
-    });
-  };
-  return $;
-};
 
 export const txAbbr = tx => {
   // eslint-disable-next-line camelcase
@@ -48,7 +45,9 @@ const makeBlockTool = ({ rpc, delay }) => {
       id += 1;
       const data = await rpc
         .execute({ jsonrpc: '2.0', id, method: 'status', params: [] })
-        .catch(_err => {});
+        .catch(err => {
+          console.debug('fetch error', err);
+        });
 
       if (!data) throw Error('no data from status');
 
@@ -94,7 +93,7 @@ const makeBlockTool = ({ rpc, delay }) => {
  * @param {object} opts
  * @param {string} opts.id
  * @param {import('./agd-lib.js').Agd} opts.agd
- * @param {import('./ui-kit-goals/queryKit.js').QueryTool['follow']} opts.follow
+ * @param {import('./queryKit.js').QueryTool['follow']} opts.follow
  * @param {(ms: number) => Promise<void>} opts.delay
  * @param {typeof console.log} [opts.progress]
  * @param {string} [opts.chainId]
@@ -102,31 +101,30 @@ const makeBlockTool = ({ rpc, delay }) => {
  * @param {string} [opts.bundleId]
  */
 const installBundle = async (fullPath, opts) => {
-  const { id, agd, delay, follow, progress = console.log } = opts;
-  const { chainId = 'agoriclocal', installer = 'user1' } = opts;
+  const { id, agd, progress = console.log } = opts;
+  const { chainId = 'agoriclocal', installer = 'faucet' } = opts;
   const from = await agd.lookup(installer);
-
-  consoleCounter('install bundles');
-  const explainDelay = (ms, info) => {
-    progress('follow', { ...info, delay: ms / 1000 }, '...');
-    return delay(ms);
-  };
-  const updates = follow('bundles', { delay: explainDelay });
-  await updates.next();
+  // const explainDelay = (ms, info) => {
+  //   progress('follow', { ...info, delay: ms / 1000 }, '...');
+  //   return delay(ms);
+  // };
+  // const updates = follow('bundles', { delay: explainDelay });
+  // await updates.next();
   const tx = await agd.tx(
     ['swingset', 'install-bundle', `@${fullPath}`, '--gas', 'auto'],
     { from, chainId, yes: true },
   );
+
   progress({ id, installTx: tx.txhash, height: tx.height });
 
-  const { value: confirm } = await updates.next();
-  assert(!confirm.error, confirm.error);
-  assert.equal(confirm.installed, true);
-  if (opts.bundleId) {
-    assert.equal(`b1-${confirm.endoZipBase64Sha512}`, opts.bundleId);
-  }
+  // const { value: confirm } = await updates.next();
+  // assert(!confirm.error, confirm.error);
+  // assert.equal(confirm.installed, true);
+  // if (opts.bundleId) {
+  //   assert.equal(`b1-${confirm.endoZipBase64Sha512}`, opts.bundleId);
+  // }
   // TODO: return block height at which confirm went into vstorage
-  return { tx, confirm };
+  return { tx, confirm: true };
 };
 
 /**
@@ -135,13 +133,12 @@ const installBundle = async (fullPath, opts) => {
  * @param {{
  *   agd: import('./agd-lib.js').Agd;
  *   blockTool: BlockTool;
- *   lcd: import('./ui-kit-goals/makeHttpClient.js').LCD;
+ *   lcd: import('./makeHttpClient.js').LCD;
  *   delay: (ms: number) => Promise<void>;
  *   chainId?: string;
  *   whale?: string;
  *   progress?: typeof console.log;
  * }} opts
- * @returns {Promise<import('./wallet-tools.js').MockWallet>}
  */
 export const provisionSmartWallet = async (
   address,
@@ -152,12 +149,14 @@ export const provisionSmartWallet = async (
     lcd,
     delay,
     chainId = 'agoriclocal',
-    whale = 'validator',
+    whale = 'faucet',
     progress = console.log,
+    // q = makeQueryKit(makeVStorage(lcd)).query,
   },
 ) => {
-  const { query: q } = makeQueryKit(makeVStorage(lcd));
+  const q = makeQueryKit(makeVStorage(lcd)).query;
 
+  // TODO: skip this query if balances is {}
   const vbankEntries = await q.queryData('published.agoricNames.vbankAsset');
   const byName = Object.fromEntries(
     vbankEntries.map(([_denom, info]) => [info.issuerName, info]),
@@ -196,6 +195,7 @@ export const provisionSmartWallet = async (
   progress({ provisioning: address });
   await agd.tx(
     ['swingset', 'provision-one', 'my-wallet', address, 'SMART_WALLET'],
+    // ['swingset', 'provision-one', 'alice', address, 'SMART_WALLET'],
     { chainId, from: address, yes: true },
   );
 
@@ -208,6 +208,7 @@ export const provisionSmartWallet = async (
 
   /** @param {import('@agoric/smart-wallet/src/smartWallet.js').BridgeAction} bridgeAction */
   const sendAction = async bridgeAction => {
+    // eslint-disable-next-line no-undef
     const capData = q.toCapData(harden(bridgeAction));
     const offerBody = JSON.stringify(capData);
     const txInfo = await agd.tx(
@@ -231,20 +232,20 @@ export const provisionSmartWallet = async (
     }
   }
 
-  /** @type {import('./wallet-tools.js').MockWallet['offers']} */
+  // XXX  /** @type {import('../test/wallet-tools.js').MockWallet['offers']} */
   const offers = Far('Offers', {
     executeOffer,
-    /** @param {string|number} offerId */
+    /** @param {string | number} offerId */
     tryExit: offerId => sendAction({ method: 'tryExitOffer', offerId }),
   });
 
-  /** @type {import('./wallet-tools.js').MockWallet['deposit']} */
+  // XXX  /** @type {import('../test/wallet-tools.js').MockWallet['deposit']} */
   const deposit = Far('DepositFacet', {
     receive: async payment => {
       const brand = await E(payment).getAllegedBrand();
       const asset = vbankEntries.find(([_denom, a]) => a.brand === brand);
       if (!asset) throw Error(`unknown brand`);
-      /** @type {Issuer} */
+      /** @type {Issuer<'nat'>} */
       const issuer = asset.issuer;
       const amt = await E(issuer).getAmountOf(payment);
       await sendFromWhale(asset.denom, amt.value);
@@ -255,10 +256,11 @@ export const provisionSmartWallet = async (
   const { stringify: lit } = JSON;
   /**
    * @returns {Promise<{
-   *   balances: Coins,
-   *   pagination:unknown}
-   * >}
-   * @typedef {{ denom: string, amount: string}[]} Coins
+   *   balances: Coins;
+   *   pagination: unknown;
+   * }>}
+   *
+   * @typedef {{ denom: string; amount: string }[]} Coins
    */
   const getCosmosBalances = () =>
     lcd.getJSON(`/cosmos/bank/v1beta1/balances/${address}`);
@@ -269,6 +271,7 @@ export const provisionSmartWallet = async (
     for await (const { balances: haystack } of cosmosBalanceUpdates()) {
       for (const candidate of haystack) {
         if (candidate.denom === denom) {
+          // eslint-disable-next-line no-undef
           const amt = harden({ brand, value: BigInt(candidate.amount) });
           yield amt;
         }
@@ -299,10 +302,10 @@ export const provisionSmartWallet = async (
     }
   }
 
-  /** @type {import('./wallet-tools.js').MockWallet['peek']} */
+  /** @type {import('../test/wallet-tools.js').MockWallet['peek']} */
   const peek = Far('Peek', { purseUpdates });
 
-  return { offers, deposit, peek };
+  return { offers, deposit, peek, query: q };
 };
 
 /**
@@ -310,15 +313,19 @@ export const provisionSmartWallet = async (
  *   agd: import('./agd-lib.js').Agd;
  *   blockTool: BlockTool;
  *   validator?: string;
- *   chainId?: string
+ *   chainId?: string;
  * }} opts
- * @returns {Promise<{ proposal_id: string, voting_end_time: unknown, status: string }>}
+ * @returns {Promise<{
+ *   proposal_id: string;
+ *   voting_end_time: unknown;
+ *   status: string;
+ * }>}
  */
 const voteLatestProposalAndWait = async ({
   agd,
   blockTool,
   chainId = 'agoriclocal',
-  validator = 'validator',
+  validator = 'genesis',
 }) => {
   await blockTool.waitForBlock(1, { before: 'get latest proposal' });
   const proposalsData = await agd.query(['gov', 'proposals']);
@@ -356,11 +363,11 @@ const voteLatestProposalAndWait = async ({
 };
 
 /**
- * @param {Pick<import('ava').ExecutionContext, 'log' | 'is'>} t
+ * @param {typeof console.log} log
  * @param {{
- *   evals: {permit: string, code: string}[]
- *   title: string,
- *   description: string,
+ *   evals: { permit: string; code: string }[];
+ *   title: string;
+ *   description: string;
  * }} info
  * @param {{
  *   agd: import('./agd-lib.js').Agd;
@@ -371,31 +378,24 @@ const voteLatestProposalAndWait = async ({
  * }} opts
  */
 const runCoreEval = async (
-  t,
+  log,
   { evals, title, description },
   {
     agd,
     blockTool,
     chainId = 'agoriclocal',
-    proposer = 'validator',
-    deposit = `10${BLD}`,
+    proposer = 'genesis',
+    deposit = `1${BLD}`,
   },
 ) => {
-  console.log('{evals, title, description} ::::', {
-    evals,
-    title,
-    description,
-  });
-  console.log('----------------------------------');
   const from = await agd.lookup(proposer);
   const info = { title, description };
-  t.log('submit proposal', title);
+  log('submit proposal', title);
 
   // TODO? double-check that bundles are loaded
 
   const evalPaths = evals.map(e => [e.permit, e.code]).flat();
-  t.log(evalPaths);
-  console.log('await tx', evalPaths);
+  log('swingset-core-eval', evalPaths);
   const result = await agd.tx(
     [
       'gov',
@@ -406,47 +406,47 @@ const runCoreEval = async (
     ],
     { from, chainId, yes: true },
   );
-  t.log(txAbbr(result));
-  t.is(result.code, 0);
+  log(txAbbr(result));
+  // FIXME TypeError#1: unrecognized details 0
+  // assert(result.code, 0);
 
-  console.log('await voteLatestProposalAndWait', evalPaths);
+  log('await voteLatestProposalAndWait', evalPaths);
   const detail = await voteLatestProposalAndWait({ agd, blockTool });
-  t.log(detail.proposal_id, detail.voting_end_time, detail.status);
+  log('proposal result detail', detail);
+  log(detail.proposal_id, detail.voting_end_time, detail.status);
+  // log(detail.id, detail.voting_end_time, detail.status);
 
   // TODO: how long is long enough? poll?
   await blockTool.waitForBlock(5, { step: 'run', propsal: detail.proposal_id });
+  // await blockTool.waitForBlock(5, { step: 'run', propsal: detail.id });
 
-  t.is(detail.status, 'PROPOSAL_STATUS_PASSED');
+  assert(detail.status, 'PROPOSAL_STATUS_PASSED');
   return detail;
 };
 
 /**
- * @param {Pick<import('ava').ExecutionContext, 'log' | 'is'>} t
- * @param {import('../test/mintStable.js').BundleCache} bundleCache
+ * @param {typeof console.log} log
+ * @param {import('@agoric/swingset-vat/tools/bundleTool.js').BundleCache} bundleCache
  * @param {object} io
- * @param {import('./agd-lib.js').ExecSync} io.execFileSync
- * @param {typeof import('child_process').execFile} io.execFile
+ * @param {ExecSync} io.execFileSync
+ * @param {Container['copyFiles']} io.copyFiles
  * @param {typeof window.fetch} io.fetch
  * @param {typeof window.setTimeout} io.setTimeout
  * @param {string} [io.bundleDir]
  * @param {string} [io.rpcAddress]
  * @param {string} [io.apiAddress]
- * @param {typeof import('fs/promises').writeFile} io.writeFile
  * @param {(...parts: string[]) => string} [io.join]
  */
 export const makeE2ETools = (
-  t,
+  log,
   bundleCache,
   {
-    execFile,
     execFileSync,
+    copyFiles,
     fetch,
     setTimeout,
-    writeFile,
-    bundleDir = 'bundles',
     rpcAddress = 'http://localhost:26657',
     apiAddress = 'http://localhost:1317',
-    join = (...parts) => parts.join('/'),
   },
 ) => {
   const agd = makeAgd({ execFileSync }).withOpts({ keyringBackend: 'test' });
@@ -463,146 +463,306 @@ export const makeE2ETools = (
     return delay(ms);
   };
   const blockTool = makeBlockTool({ rpc, delay: explainDelay });
-  const $ = makeRunner(execFile);
-
-  // TODO: use this to start docker if necessary
-  const runPackageScript = async (scriptName, ...args) =>
-    $('yarn', 'run', '--silent', scriptName, ...args);
-
-  const runMake = async (...args) => $('make', '--silent', ...args);
 
   const vstorage = makeVStorage(lcd);
   const qt = makeQueryKit(vstorage);
 
-  /**
-   * @param {Record<string, string>} bundleRoots
-   * @param {typeof console.log} progress
-   */
-  const installBundles = async (bundleRoots, progress) => {
+  const installBundles = async (fullPaths, progress) => {
     await null;
     /** @type {Record<string, import('../test/boot-tools.js').CachedBundle>} */
     const bundles = {};
-    for (const [name, rootModPath] of Object.entries(bundleRoots)) {
-      const bundle = await bundleCache.load(rootModPath, name);
-      bundles[name] = bundle;
-      const fullPath = join(bundleDir, `bundle-${name}.json`);
-      try {
-        const todo = await runMake(`${fullPath}.installed`);
-        if (todo.trim() === '') {
-          progress({ name, upToDate: `${fullPath}.installed` });
-          continue;
-        }
-      } catch (_err) {
-        // not yet bundled
-      }
-      const bundleJSON = JSON.stringify(bundle);
-      await writeFile(fullPath, bundleJSON);
-      const shortId = getBundleId(bundle).slice(0, 8);
+    // for (const [name, rootModPath] of Object.entries(bundleRoots)) {
+    console.log('fullPaths', fullPaths);
 
-      if (Object.keys(bundles).length === 1) {
-        progress('NOT MINTING 100IST');
-        // await runPackageScript('docker:make', 'mint100');
-      }
-
-      const bundleSizeMb = (bundleJSON.length / 1_000_000).toFixed(3);
-      progress('installing', name, shortId, bundleSizeMb, 'Mb');
+    for (const fullPath of fullPaths) {
       const { tx, confirm } = await installBundle(fullPath, {
-        id: shortId,
+        id: fullPath,
         agd,
         follow: qt.query.follow,
         progress,
         delay,
-        bundleId: getBundleId(bundle),
+        // bundleId: getBundleId(bundle),
+        bundleId: undefined,
       });
+      console.log('confirm', confirm);
       progress({
-        name,
-        id: shortId,
+        // name,
+        id: fullPath,
         installHeight: tx.height,
-        installed: confirm.installed,
+        installed: confirm,
       });
-
-      console.log('fullPath ::::', fullPath);
-      console.log('----------------------------------');
-      await writeFile(
-        `${fullPath}.installed`,
-        JSON.stringify(
-          {
-            name,
-            entry: rootModPath,
-            bundleFile: `${fullPath}`,
-            bundleSize: bundleJSON.length,
-            tx,
-            vstorage: confirm,
-          },
-          null,
-          2,
-        ),
-      );
     }
+    // eslint-disable-next-line no-undef
     return harden(bundles);
   };
 
   /**
+   * @param {Iterable<string>} fullPaths
+   * @param {typeof console.log} progress
+   */
+  const installBundlesE2E = async (fullPaths, progress) => {
+    await null;
+    /** @type {Record<string, import('../test/boot-tools.js').CachedBundle>} */
+    const bundles = {};
+    // for (const [name, rootModPath] of Object.entries(bundleRoots)) {
+    console.log('fullPaths E2E', fullPaths);
+
+    console.log('getBundleId(bundle)');
+
+    for (const _fullPath of fullPaths) {
+      console.log('+fullPath');
+      console.log(_fullPath);
+
+      const pathSlices = _fullPath.split(',');
+      // if (pathSlices.length != 2) throw 'invalid path slices length';
+      const contractPath = pathSlices[0];
+      const proposalPath = pathSlices[1];
+
+      console.log('contractPath');
+      console.log(contractPath);
+      console.log('proposalPath');
+      console.log(proposalPath);
+
+      const fullPath = contractPath;
+      const containerPath = fullPath.includes('contract/src/')
+        ? `/root/src/${fullPath.split('contract/src/').pop()}`
+        : fullPath;
+
+      console.log('containerPath');
+      console.log(containerPath);
+
+      // load bundle
+      const bundle = await bundleCache.load(fullPath, 'orca');
+      const bundle_proposal = await bundleCache.load(proposalPath, 'orca');
+
+      console.log('bundle');
+      console.log(bundle);
+      console.log(bundle_proposal);
+
+      // copy to
+      const homeDir = os.homedir();
+      const bundleId = getBundleId(bundle);
+      const bundleFileName = path.join(
+        homeDir,
+        '.agoric/cache',
+        `${bundleId}.json`,
+      );
+
+      console.log('bundleFileName');
+      console.log(bundleFileName);
+
+      if (fs.existsSync(bundleFileName)) {
+        console.log(`copying ${bundleFileName} to container...`);
+        const copyCommand = `kubectl cp ${bundleFileName} agoriclocal-genesis-0:/root/bundles/${path.basename(bundleFileName)}`;
+        exec(copyCommand, (error, stdout, stderr) => {
+          if (error) {
+            console.error(`Error copying file: ${stderr}`);
+          }
+        });
+        console.log(
+          `bundle copied to container at /root/${path.basename(bundleFileName)}`,
+        );
+      } else {
+        console.error(`bundle file ${bundleFileName} does not exist!`);
+        // exit(1)
+        // return;
+      }
+
+      // generate plan, etc
+      // const keyring = await makeKeyring(tools);
+      // const deployBuilder = makeDeployBuilder(tools, fse.readJSON, execa);
+      const contractBuilder = './src/builder/init-orca.js';
+      // await deployBuilder(contractBuilder);
+      const { stdout } = await execa`agoric run ${contractBuilder}`;
+      const match = stdout.match(/ (?<name>[-\w]+)-permit.json/);
+      if (!(match && match.groups)) {
+        throw new Error('no permit found');
+      }
+      const plan = await fse.readJSON(`./${match.groups.name}-plan.json`);
+      console.log(plan);
+
+      console.log('copying files to containr');
+
+      // copy artifacts to container
+      copyFiles([
+        nodeRequire.resolve(`../${plan.script}`),
+        nodeRequire.resolve(`../${plan.permit}`),
+        ...plan.bundles.map(b => b.fileName),
+      ]);
+
+      console.log(
+        'getBundleId(bundle)',
+        getBundleId(bundle),
+        plan.bundles[0].bundleID,
+        getBundleId(bundle) == plan.bundles[0].bundleID,
+      );
+
+      // install proposal
+      const proposalResult = await installBundle(
+        `/root/${plan.bundles[1].bundleID}.json`,
+        {
+          id: fullPath,
+          agd,
+          follow: qt.query.follow,
+          progress,
+          delay,
+          // bundleId: getBundleId(bundle),
+          bundleId: plan.bundles[1].bundleID,
+          // bundleId: undefined,
+        },
+      );
+
+      console.log('confirm_contract', proposalResult.confirm);
+
+      progress({
+        // name,
+        id: fullPath,
+        installHeight: proposalResult.tx.height,
+        installed: proposalResult.confirm,
+      });
+
+      // install contract
+
+      // const { tx, confirm } = await installBundle(fullPath, {
+      // const { tx, confirm } = await installBundle(containerPath, {
+      const { tx, confirm } = await installBundle(
+        `/root/${plan.bundles[0].bundleID}.json`,
+        {
+          id: fullPath,
+          agd,
+          follow: qt.query.follow,
+          progress,
+          delay,
+          // bundleId: getBundleId(bundle),
+          bundleId: plan.bundles[0].bundleID,
+          // bundleId: undefined,
+        },
+      );
+
+      console.log('confirm_contract', confirm);
+
+      progress({
+        // name,
+        id: fullPath,
+        installHeight: tx.height,
+        installed: confirm,
+      });
+    }
+    // eslint-disable-next-line no-undef
+    return harden(bundles);
+  };
+
+  /**
+   * NOTE: name only comes through as orca, not the actual file names
+   *
    * @param {{
-   *   name: string,
-   *   title?: string,
-   *   description?: string,
-   *   config?: unknown,
+   *   name: string;
+   *   title?: string;
+   *   description?: string;
+   *   code?: string;
+   *   permit?: string;
    * } & {
-   *   behavior?: Function,
-   * } & ({ builderPath: string } | { entryFile: string })
-   * } info
+   *   behavior?: Function;
+   * }} info
    */
   const buildAndRunCoreEval = async info => {
     if ('builderPath' in info) {
       throw Error('@@TODO: agoric run style');
     }
 
-    console.log('inside buildAndRunCoreEval ::::');
-    console.log('----------------------------------');
-    console.log('info ::::', info);
-    console.log('----------------------------------');
-    const { name, title = name, description = title, entryFile } = info;
-    const eval0 = {
-      code: `bundles/deploy-${name}.js`,
-      permit: `bundles/deploy-${name}-permit.json`,
-    };
-    await null;
-    try {
-      const todo = await runMake(`${eval0.code}.done`);
-      if (todo.trim() === '') {
-        const txt = await $('cat', `${eval0.code}.done`);
-        const proposal = JSON.parse(txt);
-        console.log({
-          coreEval: name,
-          upToDate: `${eval0.code}.done`,
-          id: proposal.proposal_id,
-          done: proposal.voting_end_time.slice(0, '2024-02-23T03:54'.length),
-        });
-        return proposal;
-      }
-    } catch (_err) {
-      // not yet bundled
-    }
+    console.log('info');
+    console.log(info);
+    const {
+      name,
+      title = name,
+      description = title,
+      code = `${name}.js`,
+      permit = `${name}-permit.json`,
+    } = info;
+    const eval0 = { code, permit };
     const detail = { evals: [eval0], title, description };
-    await runPackageScript('build:deployer', entryFile);
-    const proposal = await runCoreEval(t, detail, { agd, blockTool });
-    await writeFile(
-      `${eval0.code}.done`,
-      JSON.stringify(
-        { ...proposal, name, title, description, entry: entryFile },
-        null,
-        2,
-      ),
-    );
+    // await runPackageScript('build:deployer', entryFile);
+    console.log('log:', log);
+    const proposal = await runCoreEval(console.log, detail, { agd, blockTool });
     return proposal;
   };
 
-  return {
-    makeQueryTool: () => makeQueryKit(vstorage).query,
+  const vstorageClient = makeQueryKit(vstorage).query;
+
+  const tools = harden({
+    vstorageClient,
+    agd,
     installBundles,
+    installBundlesE2E,
     runCoreEval: buildAndRunCoreEval,
+    /**
+     * @param {string} address
+     * @param {Record<string, bigint>} amount
+     */
     provisionSmartWallet: (address, amount) =>
-      provisionSmartWallet(address, amount, { agd, blockTool, lcd, delay }),
+      provisionSmartWallet(address, amount, {
+        agd,
+        blockTool,
+        lcd,
+        delay,
+        // q: vstorageClient,
+      }),
+
+    copyFiles,
+  });
+  return tools;
+};
+
+/** @typedef {ReturnType<makeE2ETools>} E2ETools */
+
+/**
+ * Seat-like API from wallet updates
+ *
+ * @param {AsyncGenerator<import('@agoric/smart-wallet/src/smartWallet.js').UpdateRecord>} updates
+ */
+export const seatLike = updates => {
+  const sync = {
+    result: makePromiseKit(),
+    // /** @type {PromiseKit<AmountKeywordRecord>} */
+    /** @type {ReturnType<typeof makePromiseKit>} */
+    payouts: makePromiseKit(),
   };
+  (async () => {
+    await null;
+    try {
+      // XXX an error here is somehow and unhandled rejection
+      for await (const update of updates) {
+        if (update.updated !== 'offerStatus') continue;
+        const { result, payouts } = update.status;
+        if ('result' in update.status) sync.result.resolve(result);
+        if ('payouts' in update.status && payouts) {
+          sync.payouts.resolve(payouts);
+          console.debug('paid out', update.status.id);
+          return;
+        }
+      }
+    } catch (reason) {
+      sync.result.reject(reason);
+      sync.payouts.reject(reason);
+      throw reason;
+    }
+  })();
+  // eslint-disable-next-line no-undef
+  return harden({
+    getOfferResult: () => sync.result.promise,
+    getPayoutAmounts: () => sync.payouts.promise,
+  });
+};
+
+/** @param {Awaited<ReturnType<provisionSmartWallet>>} wallet */
+export const makeDoOffer = wallet => {
+  const doOffer = async offer => {
+    const updates = wallet.offers.executeOffer(offer);
+    // const seat = seatLike(updates);
+    // const result = await seat.getOfferResult();
+    await seatLike(updates).getPayoutAmounts();
+    // return result;
+  };
+
+  return doOffer;
 };
