@@ -33,9 +33,8 @@ jobs:
 
       - name: Setup Starship Infrastructure
         id: starship-infra
-        uses: hyperweb-io/starship-action@0.5.9
+        uses: hindley-milner-systems/starship-action@main
         with:
-          # uses ghcr.io/agoric/agoric-sdk:dev image (latest master)
           config: ./e2e-testing/config.yaml
           timeout: 30m
           namespace: agoric-multichain
