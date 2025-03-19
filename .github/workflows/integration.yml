@@ -36,8 +36,7 @@ jobs:
         uses: hyperweb-io/starship-action@0.5.9
         with:
           # uses ghcr.io/agoric/agoric-sdk:dev image (latest master)
-          values: ./e2e-testing/config.yaml
-          port-forward: true
+          config: ./e2e-testing/config.yaml
           timeout: 30m
           namespace: agoric-multichain
   
