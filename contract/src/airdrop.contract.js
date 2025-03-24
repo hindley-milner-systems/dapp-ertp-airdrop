@@ -33,7 +33,7 @@ const ProofDataShape = harden({
 
 const OfferArgsShape = harden({
   tier: M.number(),
-  key: M.string(),
+  key: M.string({ stringLengthLimit: 44 }),
   proof: M.arrayOf(ProofDataShape),
 });
 
