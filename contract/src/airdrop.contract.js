@@ -480,23 +480,25 @@ export const start = async (zcf, privateArgs, baggage) => {
 							"Computed proof does not equal the correct root hash. ",
 						);
 
-						const depositFacet = await getDepositFacet(derivedAddress);
 						const payment = await withdrawFromSeat(zcf, tokenHolderSeat, {
 							Tokens: this.state.payoutArray[tier],
 						});
+
+						Promise.resolve(
+							accountStore.add(pubkey, {
+								address: derivedAddress,
+								pubkey,
+								tier,
+								amountAllocated: payment.value,
+								epoch: this.state.currentEpoch,
+							}),
+						);
+
+						const depositFacet = await getDepositFacet(derivedAddress);
 						await Promise.all(
 							...[
 								Object.values(payment).map((pmtP) =>
 									E.when(pmtP, (pmt) => E(depositFacet).receive(pmt)),
-								),
-								Promise.resolve(
-									accountStore.add(pubkey, {
-										address: derivedAddress,
-										pubkey,
-										tier,
-										amountAllocated: payment.value,
-										epoch: this.state.currentEpoch,
-									}),
 								),
 							],
 						);
