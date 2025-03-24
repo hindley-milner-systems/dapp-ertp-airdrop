@@ -1,49 +1,49 @@
 // @ts-nocheck
-import { M } from '@agoric/store';
-import { makeDurableZone } from '@agoric/zone/durable.js';
-import { E } from '@endo/far';
-import { AmountMath, AmountShape, AssetKind, MintShape } from '@agoric/ertp';
-import { TimeMath, TimestampShape } from '@agoric/time';
-import { TimerShape } from '@agoric/zoe/src/typeGuards.js';
-import { bech32 } from 'bech32';
-import { sha256 } from '@noble/hashes/sha256';
-import { ripemd160 } from '@noble/hashes/ripemd160';
+import { M } from '@agoric/store'
+import { makeDurableZone } from '@agoric/zone/durable.js'
+import { E } from '@endo/far'
+import { AmountMath, AmountShape, AssetKind, MintShape } from '@agoric/ertp'
+import { TimeMath, TimestampShape } from '@agoric/time'
+import { TimerShape } from '@agoric/zoe/src/typeGuards.js'
+import { bech32 } from 'bech32'
+import { sha256 } from '@noble/hashes/sha256'
+import { ripemd160 } from '@noble/hashes/ripemd160'
 import {
   atomicRearrange,
   makeRatio,
   withdrawFromSeat,
-} from '@agoric/zoe/src/contractSupport/index.js';
-import { decodeBase64 } from '@endo/base64';
-import { divideBy } from '@agoric/zoe/src/contractSupport/ratio.js';
-import { makeTracer, mustMatch } from '@agoric/internal';
-import { makeWaker, oneDay } from './helpers/time.js';
+} from '@agoric/zoe/src/contractSupport/index.js'
+import { decodeBase64 } from '@endo/base64'
+import { divideBy } from '@agoric/zoe/src/contractSupport/ratio.js'
+import { makeTracer, mustMatch } from '@agoric/internal'
+import { makeWaker, oneDay } from './helpers/time.js'
 import {
   handleFirstIncarnation,
   makeCancelTokenMaker,
-} from './helpers/validation.js';
-import { makeStateMachine } from './helpers/stateMachine.js';
-import { objectToMap } from './helpers/objectTools.js';
-import { getMerkleRootFromMerkleProof } from './merkle-tree/index.js';
-import '@agoric/zoe/exported.js';
+} from './helpers/validation.js'
+import { makeStateMachine } from './helpers/stateMachine.js'
+import { objectToMap } from './helpers/objectTools.js'
+import { getMerkleRootFromMerkleProof } from './merkle-tree/index.js'
+import '@agoric/zoe/exported.js'
 
 const ProofDataShape = harden({
   hash: M.string(),
   direction: M.string(),
-});
+})
 
 const OfferArgsShape = harden({
   tier: M.number(),
   key: M.string(),
   proof: M.arrayOf(ProofDataShape),
-});
+})
 
 const compose =
   (...fns) =>
   args =>
-    fns.reduceRight((x, f) => f(x), args);
+    fns.reduceRight((x, f) => f(x), args)
 
 const toAgoricBech = (data, limit) =>
-  bech32.encode('agoric', bech32.toWords(data), limit);
+  bech32.encode('agoric', bech32.toWords(data), limit)
 
 /**
  * Creates a digest function for a given hash function.
@@ -58,30 +58,30 @@ const createDigest =
    * @returns {Uint8Array} - The hash digest.
    */
   data =>
-    hashFn.create().update(data).digest();
+    hashFn.create().update(data).digest()
 
-const createSha256Digest = createDigest(sha256);
-const createRipe160Digest = createDigest(ripemd160);
+const createSha256Digest = createDigest(sha256)
+const createRipe160Digest = createDigest(ripemd160)
 
 const computeAddress = compose(
   toAgoricBech,
   createRipe160Digest,
   createSha256Digest,
   decodeBase64,
-);
+)
 
-const TT = makeTracer('ContractStartFn');
+const TT = makeTracer('ContractStartFn')
 
 export const messagesObject = {
   makeClaimInvitationDescription: () => 'claim airdrop',
   makeIllegalActionString: status =>
     `Airdrop can not be claimed when contract status is: ${status}.`,
-};
-harden(messagesObject);
+}
+harden(messagesObject)
 
-const AIRDROP_TIERS_STATIC = [9000n, 6500n, 3500n, 1500n, 750n];
+const AIRDROP_TIERS_STATIC = [9000n, 6500n, 3500n, 1500n, 750n]
 
-const cancelTokenMaker = makeCancelTokenMaker('airdrop-campaign');
+const cancelTokenMaker = makeCancelTokenMaker('airdrop-campaign')
 
 const AIRDROP_STATES = {
   CLOSED: 'claiming-closed',
@@ -91,7 +91,7 @@ const AIRDROP_STATES = {
   PAUSED: 'paused',
   PREPARED: 'prepared',
   RESTARTING: 'restarting',
-};
+}
 export const {
   CLOSED,
   EXPIRED,
@@ -100,15 +100,14 @@ export const {
   PAUSED,
   PREPARED,
   RESTARTING,
-} = AIRDROP_STATES;
-harden(PAUSED);
-
-harden(CLOSED);
-harden(OPEN);
-harden(EXPIRED);
-harden(PREPARED);
-harden(INITIALIZED);
-harden(RESTARTING);
+} = AIRDROP_STATES
+harden(PAUSED)
+harden(CLOSED)
+harden(OPEN)
+harden(EXPIRED)
+harden(PREPARED)
+harden(INITIALIZED)
+harden(RESTARTING)
 
 /** @import {AssetKind, Brand, Issuer, NatValue, Purse} from '@agoric/ertp/src/types.js'; */
 /** @import {CancelToken, TimerService, TimestampShape, TimestampRecord} from '@agoric/time/src/types.js'; */
@@ -120,8 +119,8 @@ harden(RESTARTING);
 export const privateArgsShape = {
   namesByAddress: M.remotable('marshaller'),
   timer: TimerShape,
-};
-harden(privateArgsShape);
+}
+harden(privateArgsShape)
 
 export const customTermsShape = {
   targetEpochLength: M.bigint(),
@@ -132,19 +131,19 @@ export const customTermsShape = {
   startTime: M.bigint(),
   feeAmount: AmountShape,
   merkleRoot: M.string(),
-};
-harden(customTermsShape);
+}
+harden(customTermsShape)
 
 export const divideAmountByTwo = brand => amount =>
-  divideBy(amount, makeRatio(200n, brand), 0n);
-harden(divideAmountByTwo);
+  divideBy(amount, makeRatio(200n, brand), 0n)
+harden(divideAmountByTwo)
 
 const handleUpdateCancelToken = (makeCancelTokenFn = cancelTokenMaker) => {
-  const cancelToken = makeCancelTokenFn();
-  TT('created new cancel token');
-  return cancelToken;
-};
-harden(handleUpdateCancelToken);
+  const cancelToken = makeCancelTokenFn()
+  TT('created new cancel token')
+  return cancelToken
+}
+harden(handleUpdateCancelToken)
 
 /**
  * Utility function that encapsulates the process of creates a token mint, and
@@ -166,20 +165,20 @@ const tokenMintFactory = async (
   const mint = await zcf.makeZCFMint(tokenName, assetKind, {
     ...displayInfo,
     assetKind,
-  });
-  const { brand, issuer } = await mint.getIssuerRecord();
+  })
+  const { brand, issuer } = await mint.getIssuerRecord()
   return {
     mint,
     brand,
     issuer,
-  };
-};
+  }
+}
 
 const makeToTS = timerBrand => value =>
-  TimeMath.coerceTimestampRecord(value, timerBrand);
-const fromTS = ts => TimeMath.absValue(ts);
+  TimeMath.coerceTimestampRecord(value, timerBrand)
+
 const makeToRT = timerBrand => value =>
-  TimeMath.coerceRelativeTimeRecord(value, timerBrand);
+  TimeMath.coerceRelativeTimeRecord(value, timerBrand)
 
 /**
  * @param {TimestampRecord} sourceTs Base timestamp used to as the starting time
@@ -189,33 +188,33 @@ const makeToRT = timerBrand => value =>
  */
 
 const createFutureTs = (sourceTs, inputTs) =>
-  TimeMath.absValue(sourceTs) + TimeMath.relValue(inputTs);
+  TimeMath.absValue(sourceTs) + TimeMath.relValue(inputTs)
 
-const SIX_DIGITS = 1_000_000n;
+const SIX_DIGITS = 1_000_000n
 /**
  * @param {ZCF<ContractTerms>} zcf
  * @param {{ marshaller: Remotable; timer: TimerService }} privateArgs
  * @param {Baggage} baggage
  */
 export const start = async (zcf, privateArgs, baggage) => {
-  TT('launching contract');
-  TT('privateArgs', privateArgs);
-  TT('baggage', baggage);
-  handleFirstIncarnation(baggage, 'LifecycleIteration');
+  TT('launching contract')
+  TT('privateArgs', privateArgs)
+  TT('baggage', baggage)
+  handleFirstIncarnation(baggage, 'LifecycleIteration')
   // XXX why is type not inferred from makeDurableZone???
   /** @type {Zone} */
-  const zone = makeDurableZone(baggage, 'rootZone');
+  const zone = makeDurableZone(baggage, 'rootZone')
 
-  const { timer, namesByAddress } = privateArgs;
+  const { timer, namesByAddress } = privateArgs
 
   /**
    * @param {string} addr
    * @returns {ERef<DepositFacet>}
    */
   const getDepositFacet = addr => {
-    assert.typeof(addr, 'string');
-    return E(namesByAddress).lookup(addr, 'depositFacet');
-  };
+    assert.typeof(addr, 'string')
+    return E(namesByAddress).lookup(addr, 'depositFacet')
+  }
 
   /** @type {import('./airdrop.proposal.js').CustomContractTerms} */
   const {
@@ -228,23 +227,22 @@ export const start = async (zcf, privateArgs, baggage) => {
     initialPayoutValues = AIRDROP_TIERS_STATIC.map(x => x * 1_000_000n),
     feeAmount,
     _brands,
-  } = zcf.getTerms();
+  } = zcf.getTerms()
 
-  const airdropStatusTracker = zone.mapStore('airdrop claim window status');
+  const airdropStatusTracker = zone.mapStore('airdrop claim window status')
 
-  const accountStore = zone.setStore('claim accounts');
+  const accountStore = zone.setStore('claim accounts')
   const stateMachine = makeStateMachine(
     INITIALIZED,
     [
       [INITIALIZED, [PREPARED]],
       [PREPARED, [OPEN, PAUSED]],
-      [OPEN, [EXPIRED, RESTARTING, PAUSED]],
-      [RESTARTING, [OPEN]],
+      [OPEN, [EXPIRED, PAUSED]],
       [PAUSED, [OPEN, PREPARED]],
       [EXPIRED, []],
     ],
     airdropStatusTracker,
-  );
+  )
 
   const [
     timerBrand,
@@ -254,32 +252,32 @@ export const start = async (zcf, privateArgs, baggage) => {
     E(timer).getTimerBrand(),
     E(timer).getCurrentTimestamp(),
     tokenMintFactory(zcf, tokenName),
-  ]);
+  ])
 
-  const [toTS, toRT] = [makeToTS(timerBrand), makeToRT(timerBrand)];
+  const toRT = makeToRT(timerBrand)
 
-  let cancelToken = null;
+  let cancelToken = null
   const makeNewCancelToken = () => {
-    cancelToken = handleUpdateCancelToken(cancelTokenMaker);
-    TT('Reassigned cancelToken', cancelToken);
-  };
+    cancelToken = handleUpdateCancelToken(cancelTokenMaker)
+    TT('Reassigned cancelToken', cancelToken)
+  }
 
-  TT('t0', t0);
+  TT('t0', t0)
 
-  const rearrange = transfers => atomicRearrange(zcf, transfers);
+  const rearrange = transfers => atomicRearrange(zcf, transfers)
 
   const tokenHolderSeat = tokenMint.mintGains({
     Tokens: AmountMath.make(tokenBrand, targetTokenSupply),
-  });
+  })
 
-  const divideAmount = divideAmountByTwo(tokenBrand);
+  const divideAmount = divideAmountByTwo(tokenBrand)
 
   const startTimestamp = createFutureTs(
     t0,
     harden({ relValue: startTime, timerBrand }),
-  );
+  )
 
-  const epochLengthTs = toRT(targetEpochLength);
+  const epochLengthTs = toRT(targetEpochLength)
 
   await objectToMap(
     {
@@ -295,7 +293,7 @@ export const start = async (zcf, privateArgs, baggage) => {
       startTime,
     },
     baggage,
-  );
+  )
 
   const interfaceGuard = {
     helper: M.interface('Helper', {
@@ -317,7 +315,7 @@ export const start = async (zcf, privateArgs, baggage) => {
       getBankAssetMint: M.call().returns(MintShape),
       reconfigureWakers: M.call(M.string(), M.promise()).returns(M.any()),
     }),
-  };
+  }
 
   const prepareContract = zone.exoClassKit(
     'Tribble Token Distribution',
@@ -352,38 +350,35 @@ export const start = async (zcf, privateArgs, baggage) => {
           nextEpoch,
           epochLength = targetEpochLength,
         ) {
-          TT('nextEpoch', nextEpoch);
-          const { helper } = this.facets;
-          console.log('targetNumberOfEpochs', targetNumberOfEpochs);
+          TT('nextEpoch', nextEpoch)
+          const { helper } = this.facets
+          console.log('targetNumberOfEpochs', targetNumberOfEpochs)
           console.log(
             '(this.state.targetNumberOfEpochs)',
             this.state.targetNumberOfEpochs,
-          );
+          )
           if (nextEpoch > targetNumberOfEpochs) {
-            makeNewCancelToken();
+            makeNewCancelToken()
             void E(timer).setWakeup(
               TimeMath.addAbsRel(absTime, toRT(epochLength)),
               makeWaker(
                 'claimPeriodEndedWaker',
                 /** @param {TimestampRecord} latestTs */
                 ({ absValue: latestTs }) => {
-                  console.log(
-                    'Airdrop complete. ',
-                    TimeMath.absValue(latestTs),
-                  );
+                  console.log('Airdrop complete. ', TimeMath.absValue(latestTs))
                   return zcf.shutdown(
                     `Airdrop complete. ${TimeMath.absValue(latestTs)}`,
-                  );
+                  )
                 },
                 cancelToken,
               ),
-            );
+            )
           } else {
-            this.state.currentEpoch = nextEpoch;
+            this.state.currentEpoch = nextEpoch
 
             void helper.updateDistributionMultiplier(
               TimeMath.addAbsRel(absTime, toRT(epochLength)),
-            );
+            )
           }
         },
         /**
@@ -411,56 +406,56 @@ export const start = async (zcf, privateArgs, baggage) => {
          * await helper.updateDistributionMultiplier(nextWakeTime);
          */
         async updateDistributionMultiplier(wakeTime) {
-          const { facets } = this;
-          makeNewCancelToken();
-          const currentTimestamp = await E(timer).getCurrentTimestamp();
-          this.state.lastRecordedTimestamp = currentTimestamp;
-          TT('new timestamp:', this.state.lastRecordedTimestamp);
-          TT('wakeTime', wakeTime);
+          const { facets } = this
+          makeNewCancelToken()
+          const currentTimestamp = await E(timer).getCurrentTimestamp()
+          this.state.lastRecordedTimestamp = currentTimestamp
+          TT('new timestamp:', this.state.lastRecordedTimestamp)
+          TT('wakeTime', wakeTime)
           void E(timer).setWakeup(
             wakeTime,
             makeWaker(
               'updateDistributionEpochWaker',
               /** @param {TimestampRecord} latestTs */
               ({ absValue: latestTs }) => {
-                console.log('this.state.currentEpoch', this.state.currentEpoch);
+                console.log('this.state.currentEpoch', this.state.currentEpoch)
 
                 // At this point of execution we are transitioning to the next epoch
                 // Before we do that we need to check if the previous epoch was the last one
 
-                facets.helper.updatePayoutArray();
+                facets.helper.updatePayoutArray()
                 facets.helper.updateEpochDetails(
                   latestTs,
                   this.state.currentEpoch + 1n,
                   this.state.epochLength,
-                );
+                )
               },
               cancelToken,
             ),
-          );
+          )
 
-          return 'wake up successfully set.';
+          return 'wake up successfully set.'
         },
         async cancelTimer() {
-          await E(timer).cancel(cancelToken);
+          await E(timer).cancel(cancelToken)
         },
         updatePayoutArray() {
           this.state.payoutArray = harden(
             this.state.payoutArray.map(x => divideAmount(x)),
-          );
+          )
 
-          return `Successfully updated payoutArray`;
+          return `Successfully updated payoutArray`
         },
       },
       public: {
         makeClaimTokensInvitation() {
-          console.log('CURRENT EPOCH:::', this.state.currentEpoch);
+          console.log('CURRENT EPOCH:::', this.state.currentEpoch)
           assert(
             airdropStatusTracker.get('currentStatus') === AIRDROP_STATES.OPEN,
             messagesObject.makeIllegalActionString(
               airdropStatusTracker.get('currentStatus'),
             ),
-          );
+          )
           /**
            * @param {UserSeat} claimSeat
            * @param {{
@@ -475,26 +470,27 @@ export const start = async (zcf, privateArgs, baggage) => {
               offerArgs,
               OfferArgsShape,
               'offerArgs does not contain the correct data.',
-            );
+            )
 
             if (accountStore.has(offerArgs.key)) {
-              claimSeat.exit();
-              throw new Error(`Token allocation has already been claimed.`);
+              claimSeat.exit()
+              throw new Error(`Token allocation has already been claimed.`)
             }
-            const { proof, key: pubkey, tier } = offerArgs;
+            const { proof, key: pubkey, tier } = offerArgs
 
-            const derivedAddress = computeAddress(pubkey);
+            const derivedAddress = computeAddress(pubkey)
 
             assert.equal(
               getMerkleRootFromMerkleProof(proof),
               merkleRoot,
               'Computed proof does not equal the correct root hash. ',
-            );
+            )
 
-            const depositFacet = await getDepositFacet(derivedAddress);
+            const depositFacet = await getDepositFacet(derivedAddress)
             const payment = await withdrawFromSeat(zcf, tokenHolderSeat, {
               Tokens: this.state.payoutArray[tier],
-            });
+            })
+
             await Promise.all(
               ...[
                 Object.values(payment).map(pmtP =>
@@ -510,7 +506,7 @@ export const start = async (zcf, privateArgs, baggage) => {
                   }),
                 ),
               ],
-            );
+            )
 
             rearrange(
               harden([
@@ -520,11 +516,11 @@ export const start = async (zcf, privateArgs, baggage) => {
                   { Fee: claimSeat.getProposal().give.Fee },
                 ],
               ]),
-            );
+            )
 
-            claimSeat.exit();
-            return 'makeClaimTokenInvitation success';
-          };
+            claimSeat.exit()
+            return 'makeClaimTokenInvitation success'
+          }
 
           return zcf.makeInvitation(
             claimHandler,
@@ -535,7 +531,7 @@ export const start = async (zcf, privateArgs, baggage) => {
             M.splitRecord({
               give: { Fee: feeAmount },
             }),
-          );
+          )
         },
       },
       creator: {
@@ -546,28 +542,28 @@ export const start = async (zcf, privateArgs, baggage) => {
             epochStartTime,
             epochEndTime,
             epochLength,
-          } = this.state;
+          } = this.state
           return {
             remainingTime,
             lastRecordedTimestamp,
             epochStartTime,
             epochEndTime,
             epochLength,
-          };
+          }
         },
         getBankAssetMint() {
-          return tokenMint;
+          return tokenMint
         },
         async reconfigureWakers(nextState, currentTimestampP) {
-          const currentTimestamp = await currentTimestampP;
+          const currentTimestamp = await currentTimestampP
 
-          stateMachine.transitionTo(nextState);
+          stateMachine.transitionTo(nextState)
 
           switch (nextState) {
             case PREPARED:
-              TT('START TIME', baggage.get('startTime'));
-              this.facets.helper.cancelTimer();
-              console.log('------------------------');
+              TT('START TIME', baggage.get('startTime'))
+              this.facets.helper.cancelTimer()
+              console.log('------------------------')
               console.log('{startTimestamp, currentTimestamp}::', {
                 previousStartTimestamp: startTimestamp,
                 currentTimestamp,
@@ -575,7 +571,7 @@ export const start = async (zcf, privateArgs, baggage) => {
                   currentTimestamp,
                   this.state.remainingTime,
                 ),
-              });
+              })
               void E(timer).setWakeup(
                 TimeMath.addAbsRel(currentTimestamp, this.state.remainingTime),
                 makeWaker('claimWindowOpenWaker', ({ absValue }) => {
@@ -583,17 +579,17 @@ export const start = async (zcf, privateArgs, baggage) => {
                     absValue,
                     remainingTime: this.state.remainingTime,
                     epochLength: this.state.epochLength,
-                  });
-                  airdropStatusTracker.init('currentEpoch', 1n);
-                  this.state.remainingTime = this.state.epochLength;
-                  this.facets.helper.updateEpochDetails(absValue, 1n);
-                  stateMachine.transitionTo(OPEN);
+                  })
+                  airdropStatusTracker.init('currentEpoch', 1n)
+                  this.state.remainingTime = this.state.epochLength
+                  this.facets.helper.updateEpochDetails(absValue, 1n)
+                  stateMachine.transitionTo(OPEN)
                 }),
                 cancelToken,
-              );
-              break;
+              )
+              break
             case PAUSED:
-              await this.facets.helper.cancelTimer();
+              await this.facets.helper.cancelTimer()
 
               if (
                 TimeMath.compareAbs(
@@ -601,57 +597,53 @@ export const start = async (zcf, privateArgs, baggage) => {
                   this.state.epochStartTime,
                 ) === 1
               ) {
-                console.group(`TimeMath.compareAbs(
-                  currentTimestamp,
-                  this.state.epochStartTime,
-                ) === 1:: === TRUE`);
                 this.state.remainingTime = TimeMath.subtractAbsAbs(
                   currentTimestamp,
                   this.state.epochStartTime,
-                );
+                )
 
-                console.log('------------------------');
+                console.log('------------------------')
                 console.log(
                   'this.state.remainingTime::',
                   this.state.remainingTime,
-                );
-                console.groupEnd();
+                )
+                console.groupEnd()
               } else {
                 console.group(`TimeMath.compareAbs(
                   currentTimestamp,
                   this.state.epochStartTime,
-                ) === 1:: !== TRUE `);
+                ) === 1:: !== TRUE `)
                 this.state.remainingTime = TimeMath.subtractAbsAbs(
                   this.state.epochEndTime,
                   currentTimestamp,
-                );
-                console.log('------------------------');
+                )
+                console.log('------------------------')
                 console.log(
                   'this.state.remainingTime::',
                   this.state.remainingTime,
-                );
-                console.groupEnd();
+                )
+                console.groupEnd()
               }
 
-              this.state.lastRecordedTimestamp = currentTimestamp;
+              this.state.lastRecordedTimestamp = currentTimestamp
 
-              break;
+              break
             case OPEN:
-              this.facets.helper.cancelTimer();
+              this.facets.helper.cancelTimer()
               this.state.epochEndTime = TimeMath.addAbsRel(
                 currentTimestamp,
                 this.state.remainingTime.relValue,
-              );
+              )
 
               void this.facets.helper.updateEpochDetails(
                 TimeMath.absValue(currentTimestamp),
                 this.state.currentEpoch,
                 this.state.remainingTime.relValue,
-              );
+              )
 
-              break;
+              break
             default:
-              break;
+              break
           }
         },
 
@@ -664,27 +656,27 @@ export const start = async (zcf, privateArgs, baggage) => {
                 assert(
                   stateMachine.canTransitionTo(offerArgs.nextState),
                   `Illegal state transition. Can not transition from state: ${stateMachine.getStatus()} to state ${offerArgs.nextState}`,
-                );
+                )
 
-                seat.exit('Exiting pause invitation');
+                seat.exit('Exiting pause invitation')
 
-                zcf.setOfferFilter(offerArgs.filter);
-                void depositInvitation(adminDepositFacet);
+                zcf.setOfferFilter(offerArgs.filter)
+                void depositInvitation(adminDepositFacet)
                 void this.facets.creator.reconfigureWakers(
                   offerArgs.nextState,
                   E(timer).getCurrentTimestamp(),
-                );
+                )
               },
               'set offer filter',
-            );
-            E(depositFacet).receive(pauseInvitation);
-          };
-          const recievedPause = depositInvitation(adminDepositFacet);
-          return recievedPause;
+            )
+            E(depositFacet).receive(pauseInvitation)
+          }
+          const recievedPause = depositInvitation(adminDepositFacet)
+          return recievedPause
         },
       },
     },
-  );
+  )
 
   const {
     creator: creatorFacet,
@@ -695,26 +687,26 @@ export const start = async (zcf, privateArgs, baggage) => {
     startTimestamp,
     epochLengthTs,
     targetNumberOfEpochs,
-  );
+  )
 
-  TT('START TIME', baggage.get('startTime'));
-  makeNewCancelToken();
+  TT('START TIME', baggage.get('startTime'))
+  makeNewCancelToken()
   void E(timer).setWakeup(
     startTimestamp,
     makeWaker('claimWindowOpenWaker', ({ absValue }) => {
-      airdropStatusTracker.init('currentEpoch', 1n);
-      helper.updateEpochDetails(absValue, 1n);
-      stateMachine.transitionTo(OPEN);
+      airdropStatusTracker.init('currentEpoch', 1n)
+      helper.updateEpochDetails(absValue, 1n)
+      stateMachine.transitionTo(OPEN)
     }),
     cancelToken,
-  );
+  )
 
-  stateMachine.transitionTo(PREPARED);
+  stateMachine.transitionTo(PREPARED)
 
   return harden({
     creatorFacet,
     publicFacet,
-  });
-};
+  })
+}
 
-harden(start);
+harden(start)

@@ -15,11 +15,12 @@
     "watch:test": "watch 'clear && yarn test | tap-color' ./test",
     "watch:src": "watch 'clear && yarn test | tap-color' ./src",
     "test": "ava",
-    "lint": "eslint 'src/*.js'",
-    "lint:fix": "eslint --fix 'src/*.js'"
+    "lint": "yarn biome lint src/*.js",
+    "lint:fix": "yarn biome lint --write src/*.js"
   },
   "devDependencies": {
     "@agoric/eslint-config": "dev",
+    "@biomejs/biome": "1.9.4",
     "@endo/bundle-source": "^2.8.0",
     "@endo/eslint-plugin": "^2.2.3",
     "@endo/init": "^0.5.60",
@@ -102,29 +103,5 @@
   "bugs": {
     "url": "https://github.com/hindley-milner-systems/dapp-ertp-airdrop/issues"
   },
-  "homepage": "https://github.com/hindley-milner-systems/dapp-ertp-airdrop#readme",
-  "eslintConfig": {
-    "parserOptions": {
-      "sourceType": "module",
-      "ecmaVersion": 2021
-    },
-    "extends": [
-      "@agoric",
-      "plugin:@endo/recommended",
-      "prettier"
-    ],
-    "ignorePatterns": [
-      "./node_modules",
-      "vendor"
-    ],
-    "rules": {
-      "no-void": "off",
-      "jsdoc/check-tag-names": "off"
-    }
-  },
-  "prettier": {
-    "trailingComma": "all",
-    "arrowParens": "avoid",
-    "singleQuote": true
-  }
+  "homepage": "https://github.com/hindley-milner-systems/dapp-ertp-airdrop#readme"
 }

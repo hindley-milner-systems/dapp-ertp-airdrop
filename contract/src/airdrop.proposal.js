@@ -7,17 +7,17 @@ import { fixHub } from './fixHub.js';
 
 const DECIMAL_PLACES = 1_000_000n;
 
-const multiply = x => y => x * y;
+const multiply = (x) => (y) => x * y;
 
 const toDenomValue = multiply(DECIMAL_PLACES);
 const AIRDROP_TIERS_STATIC = [9000n, 6500n, 3500n, 1500n, 750n].map(
-  toDenomValue,
+	toDenomValue,
 );
 
 // vstorage paths under published.*
 const BOARD_AUX = 'boardAux';
 
-const marshalData = makeMarshal(_val => Fail`data only`);
+const marshalData = makeMarshal((_val) => Fail`data only`);
 
 /**
  * @import {ERef} from '@endo/far';
@@ -32,25 +32,25 @@ const marshalData = makeMarshal(_val => Fail`data only`);
  * @param {string} boardId
  */
 const makeBoardAuxNode = async (chainStorage, boardId) => {
-  const boardAux = E(chainStorage).makeChildNode(BOARD_AUX);
-  return E(boardAux).makeChildNode(boardId);
+	const boardAux = E(chainStorage).makeChildNode(BOARD_AUX);
+	return E(boardAux).makeChildNode(boardId);
 };
 const trace = makeTracer(':::: START-TRIBBLES-AIRDROP.JS ::::');
 
 const publishBrandInfo = async (chainStorage, board, brand) => {
-  trace('publishing info for brand', brand);
-  const [id, displayInfo] = await Promise.all([
-    E(board).getId(brand),
-    E(brand).getDisplayInfo(),
-  ]);
-  trace('E(board).getId(brand)', id);
-  const node = makeBoardAuxNode(chainStorage, id);
-  trace('boardAuxNode ####', node);
-  const aux = marshalData.toCapData(harden({ displayInfo }));
+	trace('publishing info for brand', brand);
+	const [id, displayInfo] = await Promise.all([
+		E(board).getId(brand),
+		E(brand).getDisplayInfo(),
+	]);
+	trace('E(board).getId(brand)', id);
+	const node = makeBoardAuxNode(chainStorage, id);
+	trace('boardAuxNode ####', node);
+	const aux = marshalData.toCapData(harden({ displayInfo }));
 
-  const stringifiedAux = JSON.stringify(aux);
-  trace('JSON.stringify(aux)', stringifiedAux);
-  await E(node).setValue(stringifiedAux);
+	const stringifiedAux = JSON.stringify(aux);
+	trace('JSON.stringify(aux)', stringifiedAux);
+	await E(node).setValue(stringifiedAux);
 };
 
 /**
@@ -65,17 +65,17 @@ const publishBrandInfo = async (chainStorage, board, brand) => {
  */
 
 export const defaultCustomTerms = {
-  startTime: 0n,
-  initialPayoutValues: harden(AIRDROP_TIERS_STATIC),
-  targetNumberOfEpochs: 5n,
-  targetEpochLength: 12_000n / 2n,
-  targetTokenSupply: 10_000_000n * 1_000_000n,
-  tokenName: 'Tribbles',
+	startTime: 0n,
+	initialPayoutValues: harden(AIRDROP_TIERS_STATIC),
+	targetNumberOfEpochs: 5n,
+	targetEpochLength: 12_000n / 2n,
+	targetTokenSupply: 10_000_000n * 1_000_000n,
+	tokenName: 'Tribbles',
 };
 
 export const makeTerms = (terms = {}) => ({
-  ...defaultCustomTerms,
-  ...terms,
+	...defaultCustomTerms,
+	...terms,
 });
 
 harden(makeTerms);
@@ -101,10 +101,10 @@ const contractName = 'tribblesAirdrop';
  */
 
 const defaultConfig = {
-  options: {
-    [contractName]: { bundleID: '' },
-    customTerms: defaultCustomTerms,
-  },
+	options: {
+		[contractName]: { bundleID: '' },
+		customTerms: defaultCustomTerms,
+	},
 };
 /**
  * Core eval script to start contract
@@ -117,209 +117,209 @@ const defaultConfig = {
  */
 
 export const startAirdrop = async (powers, config = defaultConfig) => {
-  trace('######## inside startAirdrop ###########');
-  trace('config ::::', config);
-  trace('----------------------------------');
-  trace('powers::', powers);
-  trace('powers.installation', powers.installation.consume);
-  trace('powers.installation', powers.installation.consume[contractName]);
-  const {
-    consume: {
-      namesByAddressAdmin: namesByAddressAdminP,
-      bankManager,
-      board,
-      chainTimerService,
-      chainStorage,
-      startUpgradable,
-      zoe,
-    },
-    installation: {
-      consume: { [contractName]: airdropInstallationP },
-    },
-    instance: {
-      produce: { [contractName]: produceInstance },
-    },
-    issuer: {
-      consume: { IST: istIssuer },
-      produce: { Tribbles: produceTribblesIssuer },
-    },
-    brand: {
-      consume: { IST: istBrand },
-      produce: { Tribbles: produceTribblesBrand },
-    },
-  } = powers;
+	trace('######## inside startAirdrop ###########');
+	trace('config ::::', config);
+	trace('----------------------------------');
+	trace('powers::', powers);
+	trace('powers.installation', powers.installation.consume);
+	trace('powers.installation', powers.installation.consume[contractName]);
+	const {
+		consume: {
+			namesByAddressAdmin: namesByAddressAdminP,
+			bankManager,
+			board,
+			chainTimerService,
+			chainStorage,
+			startUpgradable,
+			zoe,
+		},
+		installation: {
+			consume: { [contractName]: airdropInstallationP },
+		},
+		instance: {
+			produce: { [contractName]: produceInstance },
+		},
+		issuer: {
+			consume: { IST: istIssuer },
+			produce: { Tribbles: produceTribblesIssuer },
+		},
+		brand: {
+			consume: { IST: istBrand },
+			produce: { Tribbles: produceTribblesBrand },
+		},
+	} = powers;
 
-  const [issuerIST, feeBrand, timer, namesByAddressAdmin] = await Promise.all([
-    istIssuer,
-    istBrand,
-    chainTimerService,
-    namesByAddressAdminP,
-  ]);
+	const [issuerIST, feeBrand, timer, namesByAddressAdmin] = await Promise.all([
+		istIssuer,
+		istBrand,
+		chainTimerService,
+		namesByAddressAdminP,
+	]);
 
-  const { customTerms } = config.options;
+	const { customTerms } = config.options;
 
-  /** @type {CustomContractTerms} */
-  const terms = {
-    ...customTerms,
-    feeAmount: harden({
-      brand: feeBrand,
-      value: toDenomValue(5n),
-    }),
-  };
+	/** @type {CustomContractTerms} */
+	const terms = {
+		...customTerms,
+		feeAmount: harden({
+			brand: feeBrand,
+			value: toDenomValue(5n),
+		}),
+	};
 
-  trace('BEFORE assert(config?.options?.merkleRoot');
-  assert(
-    customTerms?.merkleRoot,
-    'can not start contract without merkleRoot???',
-  );
-  trace('AFTER assert(config?.options?.merkleRoot');
-  const namesByAddress = await fixHub(namesByAddressAdmin);
+	trace('BEFORE assert(config?.options?.merkleRoot');
+	assert(
+		customTerms?.merkleRoot,
+		'can not start contract without merkleRoot???',
+	);
+	trace('AFTER assert(config?.options?.merkleRoot');
+	const namesByAddress = await fixHub(namesByAddressAdmin);
 
-  const startOpts = {
-    installation: await airdropInstallationP,
-    label: contractName,
-    terms,
-    issuerKeywordRecord: {
-      Fee: issuerIST,
-    },
-    issuerNames: ['Tribbles'],
-    privateArgs: await deeplyFulfilledObject(
-      harden({
-        timer,
-        namesByAddress,
-      }),
-    ),
-  };
+	const startOpts = {
+		installation: await airdropInstallationP,
+		label: contractName,
+		terms,
+		issuerKeywordRecord: {
+			Fee: issuerIST,
+		},
+		issuerNames: ['IbcTribbles'],
+		privateArgs: await deeplyFulfilledObject(
+			harden({
+				timer,
+				namesByAddress,
+			}),
+		),
+	};
 
-  trace('BEFORE astartContract(permittedPowers, startOpts);', { startOpts });
+	trace('BEFORE astartContract(permittedPowers, startOpts);', { startOpts });
 
-  const { instance, creatorFacet } = await E(startUpgradable)(startOpts);
-  trace('contract installation started');
-  trace(instance);
-  const instanceTerms = await E(zoe).getTerms(instance);
-  trace('instanceTerms::', instanceTerms);
-  const {
-    brands: { Tribbles: tribblesBrand },
-    issuers: { Tribbles: tribblesIssuer },
-  } = instanceTerms;
+	const { instance, creatorFacet } = await E(startUpgradable)(startOpts);
+	trace('contract installation started');
+	trace(instance);
+	const instanceTerms = await E(zoe).getTerms(instance);
+	trace('instanceTerms::', instanceTerms);
+	const {
+		brands: { Tribbles: tribblesBrand },
+		issuers: { Tribbles: tribblesIssuer },
+	} = instanceTerms;
 
-  produceInstance.reset();
-  produceInstance.resolve(instance);
+	produceInstance.reset();
+	produceInstance.resolve(instance);
 
-  produceTribblesBrand.reset();
-  produceTribblesIssuer.reset();
-  produceTribblesBrand.resolve(tribblesBrand);
-  produceTribblesIssuer.resolve(tribblesIssuer);
+	produceTribblesBrand.reset();
+	produceTribblesIssuer.reset();
+	produceTribblesBrand.resolve(tribblesBrand);
+	produceTribblesIssuer.resolve(tribblesIssuer);
 
-  // Sending invitation for pausing contract to a specific wallet
-  // TODO: add correct wallet address
-  const adminWallet = 'agoric1jng25adrtpl53eh50q7fch34e0vn4g72j6zcml';
-  await E(namesByAddressAdmin).reserve(adminWallet);
-  const adminDepositFacet = E(namesByAddress).lookup(
-    adminWallet,
-    'depositFacet',
-  );
+	// Sending invitation for pausing contract to a specific wallet
+	// TODO: add correct wallet address
+	const adminWallet = 'agoric1jng25adrtpl53eh50q7fch34e0vn4g72j6zcml';
+	await E(namesByAddressAdmin).reserve(adminWallet);
+	const adminDepositFacet = E(namesByAddress).lookup(
+		adminWallet,
+		'depositFacet',
+	);
 
-  await E(creatorFacet).makeSetOfferFilterInvitation(adminDepositFacet);
+	await E(creatorFacet).makeSetOfferFilterInvitation(adminDepositFacet);
 
-  // addAsset creating a short lived mint
-  // See https://github.com/hindley-milner-systems/dapp-ertp-airdrop/issues/164
-  await E(bankManager).addAsset(
-    'utribbles',
-    'Tribbles',
-    'Tribbles Intersubjective Token',
-    harden({
-      issuer: tribblesIssuer,
-      brand: tribblesBrand,
-    }),
-  );
-  await publishBrandInfo(chainStorage, board, tribblesBrand);
-  trace('deploy script complete.');
+	// addAsset creating a short lived mint
+	// See https://github.com/hindley-milner-systems/dapp-ertp-airdrop/issues/164
+	await E(bankManager).addAsset(
+		'utribbles',
+		'Tribbles',
+		'Tribbles Intersubjective Token',
+		harden({
+			issuer: tribblesIssuer,
+			brand: tribblesBrand,
+		}),
+	);
+	await publishBrandInfo(chainStorage, board, tribblesBrand);
+	trace('deploy script complete.');
 };
 
 /** @type {BootstrapManifest} */
 const airdropManifest = harden({
-  [startAirdrop.name]: {
-    consume: {
-      namesByAddress: true,
-      namesByAddressAdmin: true,
-      bankManager: true,
-      board: true,
-      chainStorage: true,
-      chainTimerService: true,
-      agoricNames: true,
-      brandAuxPublisher: true,
-      startUpgradable: true, // to start contract and save adminFacet
-      zoe: true, // to get contract terms, including issuer/brand,
-    },
-    installation: {
-      consume: { [contractName]: true },
-      produce: { [contractName]: true },
-    },
-    issuer: {
-      consume: { IST: true, Tribbles: true },
-      produce: { Tribbles: true },
-    },
-    brand: {
-      consume: { IST: true, Tribbles: true },
-      produce: { Tribbles: true },
-    },
-    instance: { produce: { [contractName]: true } },
-  },
+	[startAirdrop.name]: {
+		consume: {
+			namesByAddress: true,
+			namesByAddressAdmin: true,
+			bankManager: true,
+			board: true,
+			chainStorage: true,
+			chainTimerService: true,
+			agoricNames: true,
+			brandAuxPublisher: true,
+			startUpgradable: true, // to start contract and save adminFacet
+			zoe: true, // to get contract terms, including issuer/brand,
+		},
+		installation: {
+			consume: { [contractName]: true },
+			produce: { [contractName]: true },
+		},
+		issuer: {
+			consume: { IST: true, Tribbles: true },
+			produce: { Tribbles: true },
+		},
+		brand: {
+			consume: { IST: true, Tribbles: true },
+			produce: { Tribbles: true },
+		},
+		instance: { produce: { [contractName]: true } },
+	},
 });
 
 export const getManifestForAirdrop = (
-  { restoreRef },
-  {
-    installKeys,
-    options = {
-      customTerms: {
-        ...defaultCustomTerms,
-        merkleRoot:
-          '0f7e7eeb1c6e5dec518ec2534a4fc55738af04b5379a052c5e3fe836f451ccd0',
-      },
-    },
-  },
+	{ restoreRef },
+	{
+		installKeys,
+		options = {
+			customTerms: {
+				...defaultCustomTerms,
+				merkleRoot:
+					'0f7e7eeb1c6e5dec518ec2534a4fc55738af04b5379a052c5e3fe836f451ccd0',
+			},
+		},
+	},
 ) => {
-  trace('getManifestForAirdrop');
-  trace('installKeys', installKeys);
-  trace('options ::::', options);
-  return harden({
-    manifest: airdropManifest,
-    installations: {
-      tribblesAirdrop: restoreRef(installKeys.tribblesAirdrop),
-    },
-    options,
-  });
+	trace('getManifestForAirdrop');
+	trace('installKeys', installKeys);
+	trace('options ::::', options);
+	return harden({
+		manifest: airdropManifest,
+		installations: {
+			ibcTribblesAirdrop: restoreRef(installKeys.ibcTribblesAirdrop),
+		},
+		options,
+	});
 };
 
 export const permit = Object.values(airdropManifest)[0];
 
 /** @type {import('@agoric/deploy-script-support/src/externalTypes.js').CoreEvalBuilder} */
 export const defaultProposalBuilder = async ({ publishRef, install }) => {
-  return harden({
-    // Somewhat unorthodox, source the exports from this builder module
-    sourceSpec:
-      '/workspaces/dapp-ertp-airdrop/contract/src/airdrop.proposal.js',
-    getManifestCall: [
-      'getManifestForAirdrop',
-      {
-        installKeys: {
-          tribblesAirdrop: publishRef(
-            install(
-              '/workspaces/dapp-ertp-airdrop/contract/src/airdrop.contract.js',
-            ),
-          ),
-        },
-      },
-    ],
-  });
+	return harden({
+		// Somewhat unorthodox, source the exports from this builder module
+		sourceSpec:
+			'/workspaces/dapp-ertp-airdrop/contract/src/airdrop.proposal.js',
+		getManifestCall: [
+			'getManifestForAirdrop',
+			{
+				installKeys: {
+					ibcTribblesAirdrop: publishRef(
+						install(
+							'/workspaces/dapp-ertp-airdrop/contract/src/airdrop.contract.js',
+						),
+					),
+				},
+			},
+		],
+	});
 };
 
 export default async (homeP, endowments) => {
-  // import dynamically so the module can work in CoreEval environment
-  const dspModule = await import('@agoric/deploy-script-support');
-  const { makeHelpers } = dspModule;
-  const { writeCoreEval } = await makeHelpers(homeP, endowments);
-  await writeCoreEval(startAirdrop.name, defaultProposalBuilder);
+	// import dynamically so the module can work in CoreEval environment
+	const dspModule = await import('@agoric/deploy-script-support');
+	const { makeHelpers } = dspModule;
+	const { writeCoreEval } = await makeHelpers(homeP, endowments);
+	await writeCoreEval(startAirdrop.name, defaultProposalBuilder);
 };
