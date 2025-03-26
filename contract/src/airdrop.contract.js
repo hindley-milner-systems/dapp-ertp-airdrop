@@ -560,6 +560,7 @@ export const start = async (zcf, privateArgs, baggage) => {
                   this.state.remainingTime,
                 ),
               });
+              makeNewCancelToken();
               void E(timer).setWakeup(
                 TimeMath.addAbsRel(currentTimestamp, this.state.remainingTime),
                 makeWaker('claimWindowOpenWaker', ({ absValue }) => {
