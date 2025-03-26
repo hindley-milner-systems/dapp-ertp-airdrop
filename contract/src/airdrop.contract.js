@@ -27,8 +27,8 @@ import { getMerkleRootFromMerkleProof } from './merkle-tree/index.js';
 import '@agoric/zoe/exported.js';
 
 const ProofDataShape = harden({
-  hash: M.string(),
-  direction: M.string(),
+  hash: M.string({ stringLengthLimit: 64 }),
+  direction: M.string({ stringLengthLimit: 5 }),
 });
 
 const OfferArgsShape = harden({
