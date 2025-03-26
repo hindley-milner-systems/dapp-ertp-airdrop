@@ -481,24 +481,20 @@ export const start = async (zcf, privateArgs, baggage) => {
               Tokens: this.state.payoutArray[tier],
             });
 
-            Promise.resolve(
-              accountStore.add(pubkey, {
-                address: derivedAddress,
-                pubkey,
-                tier,
-                amountAllocated: payment.value,
-                epoch: this.state.currentEpoch,
-              }),
-            );
+            accountStore.add(pubkey, {
+              address: derivedAddress,
+              pubkey,
+              tier,
+              amountAllocated: payment.value,
+              epoch: this.state.currentEpoch,
+            });
 
             const depositFacet = await getDepositFacet(derivedAddress);
-            await Promise.all(
-              ...[
-                Object.values(payment).map(pmtP =>
-                  E.when(pmtP, pmt => E(depositFacet).receive(pmt)),
-                ),
-              ],
-            );
+            await Promise.all([
+              Object.values(payment).map(pmtP =>
+                E.when(pmtP, pmt => E(depositFacet).receive(pmt)),
+              ),
+            ]);
 
             rearrange(
               harden([
