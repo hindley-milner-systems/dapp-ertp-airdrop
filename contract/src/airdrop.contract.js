@@ -331,7 +331,7 @@ export const start = async (zcf, privateArgs, baggage) => {
         /**
          * @param {TimestampRecord} absTime
          * @param {bigint} nextEpoch
-         * @param epochLength
+         * @param {bigint} epochLength
          */
         updateEpochDetails(
           absTime,
