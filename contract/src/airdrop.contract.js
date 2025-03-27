@@ -340,11 +340,6 @@ export const start = async (zcf, privateArgs, baggage) => {
         ) {
           TT('nextEpoch', nextEpoch);
           const { helper } = this.facets;
-          console.log('targetNumberOfEpochs', targetNumberOfEpochs);
-          console.log(
-            '(this.state.targetNumberOfEpochs)',
-            this.state.targetNumberOfEpochs,
-          );
           if (nextEpoch > targetNumberOfEpochs) {
             makeNewCancelToken();
             void E(timer).setWakeup(
@@ -353,10 +348,7 @@ export const start = async (zcf, privateArgs, baggage) => {
                 'claimPeriodEndedWaker',
                 /** @param {TimestampRecord} latestTs */
                 ({ absValue: latestTs }) => {
-                  console.log(
-                    'Airdrop complete. ',
-                    TimeMath.absValue(latestTs),
-                  );
+                  TT('Airdrop complete. ', TimeMath.absValue(latestTs));
                   return zcf.shutdown(
                     `Airdrop complete. ${TimeMath.absValue(latestTs)}`,
                   );
@@ -409,8 +401,6 @@ export const start = async (zcf, privateArgs, baggage) => {
               'updateDistributionEpochWaker',
               /** @param {TimestampRecord} latestTs */
               ({ absValue: latestTs }) => {
-                console.log('this.state.currentEpoch', this.state.currentEpoch);
-
                 // At this point of execution we are transitioning to the next epoch
                 // Before we do that we need to check if the previous epoch was the last one
 
@@ -440,7 +430,6 @@ export const start = async (zcf, privateArgs, baggage) => {
       },
       public: {
         makeClaimTokensInvitation() {
-          console.log('CURRENT EPOCH:::', this.state.currentEpoch);
           assert(
             airdropStatusTracker.get('currentStatus') === AIRDROP_STATES.OPEN,
             messagesObject.makeIllegalActionString(
@@ -549,17 +538,6 @@ export const start = async (zcf, privateArgs, baggage) => {
 
           switch (nextState) {
             case PREPARED:
-              TT('START TIME', baggage.get('startTime'));
-              this.facets.helper.cancelTimer();
-              console.log('------------------------');
-              console.log('{startTimestamp, currentTimestamp}::', {
-                previousStartTimestamp: startTimestamp,
-                currentTimestamp,
-                newWakeupTimestamp: TimeMath.addAbsRel(
-                  currentTimestamp,
-                  this.state.remainingTime,
-                ),
-              });
               makeNewCancelToken();
               void E(timer).setWakeup(
                 TimeMath.addAbsRel(currentTimestamp, this.state.remainingTime),
@@ -586,36 +564,15 @@ export const start = async (zcf, privateArgs, baggage) => {
                   this.state.epochStartTime,
                 ) === 1
               ) {
-                console.group(`TimeMath.compareAbs(
-                  currentTimestamp,
-                  this.state.epochStartTime,
-                ) === 1:: === TRUE`);
                 this.state.remainingTime = TimeMath.subtractAbsAbs(
                   currentTimestamp,
                   this.state.epochStartTime,
                 );
-
-                console.log('------------------------');
-                console.log(
-                  'this.state.remainingTime::',
-                  this.state.remainingTime,
-                );
-                console.groupEnd();
               } else {
-                console.group(`TimeMath.compareAbs(
-                  currentTimestamp,
-                  this.state.epochStartTime,
-                ) === 1:: !== TRUE `);
                 this.state.remainingTime = TimeMath.subtractAbsAbs(
                   this.state.epochEndTime,
                   currentTimestamp,
                 );
-                console.log('------------------------');
-                console.log(
-                  'this.state.remainingTime::',
-                  this.state.remainingTime,
-                );
-                console.groupEnd();
               }
 
               this.state.lastRecordedTimestamp = currentTimestamp;
