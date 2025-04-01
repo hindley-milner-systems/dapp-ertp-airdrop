@@ -140,18 +140,18 @@ export const startAirdrop = async (powers, config = defaultConfig) => {
       produce: { [contractName]: produceInstance },
     },
     issuer: {
-      consume: { IST: istIssuer },
+      consume: { BLD: bldIssuer },
       produce: { Tribbles: produceTribblesIssuer },
     },
     brand: {
-      consume: { IST: istBrand },
+      consume: { BLD: bldBrand },
       produce: { Tribbles: produceTribblesBrand },
     },
   } = powers;
 
-  const [issuerIST, feeBrand, timer, namesByAddressAdmin] = await Promise.all([
-    istIssuer,
-    istBrand,
+  const [issuerBLD, feeBrand, timer, namesByAddressAdmin] = await Promise.all([
+    bldIssuer,
+    bldBrand,
     chainTimerService,
     namesByAddressAdminP,
   ]);
@@ -180,7 +180,7 @@ export const startAirdrop = async (powers, config = defaultConfig) => {
     label: contractName,
     terms,
     issuerKeywordRecord: {
-      Fee: issuerIST,
+      Fee: issuerBLD,
     },
     issuerNames: ['Tribbles'],
     privateArgs: await deeplyFulfilledObject(
@@ -257,11 +257,11 @@ const airdropManifest = harden({
       produce: { [contractName]: true },
     },
     issuer: {
-      consume: { IST: true, Tribbles: true },
+      consume: { BLD: true, Tribbles: true },
       produce: { Tribbles: true },
     },
     brand: {
-      consume: { IST: true, Tribbles: true },
+      consume: { BLD: true, Tribbles: true },
       produce: { Tribbles: true },
     },
     instance: { produce: { [contractName]: true } },
