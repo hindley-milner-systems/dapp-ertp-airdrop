@@ -91,14 +91,10 @@ const AIRDROP_STATES = {
   PAUSED: 'paused',
   PREPARED: 'prepared',
 };
+
+// eslint-disable-next-line @endo/harden-exports
 export const { CLOSED, EXPIRED, INITIALIZED, OPEN, PAUSED, PREPARED } =
   AIRDROP_STATES;
-harden(PAUSED);
-harden(CLOSED);
-harden(OPEN);
-harden(EXPIRED);
-harden(PREPARED);
-harden(INITIALIZED);
 
 /** @import {AssetKind, Brand, Issuer, NatValue, Purse} from '@agoric/ertp/src/types.js'; */
 /** @import {CancelToken, TimerService, TimestampShape, TimestampRecord} from '@agoric/time/src/types.js'; */
@@ -466,16 +462,16 @@ export const start = async (zcf, privateArgs, baggage) => {
               'Computed proof does not equal the correct root hash. ',
             );
 
-            const payment = await withdrawFromSeat(zcf, tokenHolderSeat, {
-              Tokens: this.state.payoutArray[tier],
-            });
-
             accountStore.add(pubkey, {
               address: derivedAddress,
               pubkey,
               tier,
-              amountAllocated: payment.value,
+              amountAllocated: this.state.payoutArray[tier],
               epoch: this.state.currentEpoch,
+            });
+
+            const payment = await withdrawFromSeat(zcf, tokenHolderSeat, {
+              Tokens: this.state.payoutArray[tier],
             });
 
             const depositFacet = await getDepositFacet(derivedAddress);
@@ -579,7 +575,6 @@ export const start = async (zcf, privateArgs, baggage) => {
 
               break;
             case OPEN:
-              this.facets.helper.cancelTimer();
               this.state.epochEndTime = TimeMath.addAbsRel(
                 currentTimestamp,
                 this.state.remainingTime.relValue,
